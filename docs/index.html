@@ -78,11 +78,10 @@ svg.ico{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stro
 .rows.r4 .tiles{font-size:clamp(42px, 10vw, 96px)}
 .rows .tiles.active .t:first-child{color:var(--accent)}
 .rows .tiles.hidden-next .t{color:var(--line)}
-.tiles.enter .t{animation:rise .3s cubic-bezier(.2,.8,.2,1) both}
-.tiles.enter .t:nth-child(2){animation-delay:.03s}.tiles.enter .t:nth-child(3){animation-delay:.06s}
-.tiles.enter .t:nth-child(4){animation-delay:.09s}.tiles.enter .t:nth-child(n+5){animation-delay:.12s}
-@keyframes rise{from{transform:translateY(16px);opacity:.2}to{transform:none;opacity:1}}
-@media (prefers-reduced-motion:reduce){ .tiles.enter .t{animation:none} }
+/* a new arpeggio only fades in very briefly: no movement, no stagger */
+.tiles.enter{animation:fadein .15s ease-out both}
+@keyframes fadein{from{opacity:.6}to{opacity:1}}
+@media (prefers-reduced-motion:reduce){ .tiles.enter{animation:none} }
 .progress{display:flex;gap:7px;flex-wrap:wrap;align-items:center;min-height:14px}
 .progress i{width:13px;height:13px;border-radius:50%;border:2px solid var(--line);display:block}
 .progress i.on{background:var(--accent);border-color:var(--accent)}
