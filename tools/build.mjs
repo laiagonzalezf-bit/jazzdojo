@@ -6,6 +6,7 @@ import { build } from 'esbuild';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import vm from 'node:vm';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const r = p => path.join(root, p);
@@ -17,7 +18,8 @@ tpl = tpl.replace(/\{\{svg:(\w+)\}\}/g, (_, name) => {
   return svg.replace('<svg ', `<svg class="${name === 'enso' ? 'mark' : 'word'}" aria-hidden="true" `);
 });
 const [head, rest] = tpl.split('<!--BODY-->');
-const body = rest.replace('<!--SCRIPT-->', `<script>${js.replace(/<\/script/g, '<\\/script')}</script>`);
+// function replacement: the bundle may contain `$'` or `$&`, which a replacement string would expand
+const body = rest.replace('<!--SCRIPT-->', () => `<script>${js.replace(/<\/script/g, '<\\/script')}</script>`);
 const headPart = head.replace('<!--HEAD-->', '');
 
 function copyDir(src, dst) {
@@ -55,6 +57,8 @@ ${body}
 </html>
 `;
 fs.writeFileSync(r('docs/index.html'), full);
+// safety net: the inlined script must still parse after templating
+new vm.Script(full.slice(full.indexOf('<script>') + 8, full.lastIndexOf('</script>')));
 const version = Date.now().toString(36);
 const files = ['./', 'index.html', ...listFiles(r('docs')).filter(f => !/^sw\.js$|\.txt$|logo|belt/.test(f))];
 fs.writeFileSync(r('docs/sw.js'), fs.readFileSync(r('public/sw.js'), 'utf8').replace('__VERSION__', version).replace('__FILES__', JSON.stringify(files)));

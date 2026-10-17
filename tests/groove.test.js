@@ -52,3 +52,10 @@ test('odd and compound meters produce notes', () => {
     assert.ok(n.some(x => x.kind === 'drum') && n.some(x => x.kind === 'bass'));
   }
 });
+test('harmony stays in a middle register over a long progression', () => {
+  for (const harmony of ['piano', 'rhodes', 'guitar']) {
+    const notes = render('swing', harmony).filter(n => n.kind === 'chord').flatMap(n => n.midis);
+    assert.ok(Math.max(...notes) <= 74, `${harmony} top ${Math.max(...notes)}`);
+    assert.ok(Math.min(...notes) >= 50, `${harmony} bottom ${Math.min(...notes)}`);
+  }
+});

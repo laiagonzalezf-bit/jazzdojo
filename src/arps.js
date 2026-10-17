@@ -24,8 +24,18 @@ export class ArpEngine {
   }
   reset(keepUpTo = -1) {
     this.list = keepUpTo >= 0 && this.list ? this.list.slice(0, keepUpTo + 1) : [];
+    this.src = keepUpTo >= 0 && this.src ? this.src.slice(0, keepUpTo + 1) : [];
     this.seq = 0;
   }
+  /** Own patterns shown as fixed rows: a short list (≤ 4) played in order. Returns the patterns or null. */
+  fixedRows() {
+    const s = this.get();
+    if (s.source !== 'list' || s.order !== 'seq') return null;
+    const pats = parsePatterns(s.patterns);
+    return pats.length >= 1 && pats.length <= 4 ? pats : null;
+  }
+  /** Index in the pattern list of the pattern used for slot k (own lists only), else -1. */
+  sourceIndex(k) { return this.src[k] ?? -1; }
   /** Degrees allowed for a chord (all selected degrees, or only those written in the symbol). */
   allowed(chord) {
     const s = this.get();
@@ -47,7 +57,7 @@ export class ArpEngine {
         if (ok.length) pats = ok;
       }
       if (pats.length) {
-        if (s.order === 'seq') return pats[(this.seq++) % pats.length];
+        if (s.order === 'seq') { const i = (this.seq++) % pats.length; this.lastSrc = parsePatterns(s.patterns).findIndex(p => same(p, pats[i])); return pats[i]; }
         const recent = this.recent(Math.min(3, pats.length - 1));
         for (let t = 0; t < 20; t++) {
           const p = pats[Math.floor(this.rng() * pats.length)];
@@ -74,7 +84,11 @@ export class ArpEngine {
   /** Pattern for slot k. `chordFor(k)` may return the chord sounding in that slot (for "only written degrees"). */
   at(k, chordFor) {
     if (k < 0) k = 0;
-    while (this.list.length <= k) this.list.push(this.make(chordFor ? chordFor(this.list.length) : null));
+    while (this.list.length <= k) {
+      this.lastSrc = -1;
+      this.list.push(this.make(chordFor ? chordFor(this.list.length) : null));
+      this.src.push(this.lastSrc);
+    }
     return this.list[k];
   }
 }

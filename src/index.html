@@ -59,9 +59,12 @@ svg.ico{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stro
 .countin{font-size:15px;font-weight:600;color:var(--accent)}
 .tiles{display:flex;flex-wrap:wrap;align-items:flex-end;min-height:1em}
 .tiles .t{font-weight:600;line-height:.95;min-width:.62em;text-align:center;font-variant-numeric:tabular-nums}
-.big{font-size:clamp(76px, 19vw, 176px);gap:clamp(10px,3vw,30px)}
-.big .t:first-child{color:var(--accent)}
-.small{font-size:clamp(32px, 8vw, 54px);color:var(--muted);gap:14px}
+.rows{display:flex;flex-direction:column;gap:clamp(6px,1.5vw,14px)}
+.rows .tiles{font-size:clamp(64px, 16vw, 150px);gap:clamp(10px,3vw,30px);min-height:1.05em}
+.rows.r3 .tiles{font-size:clamp(48px, 12vw, 112px)}
+.rows.r4 .tiles{font-size:clamp(42px, 10vw, 96px)}
+.rows .tiles.active .t:first-child{color:var(--accent)}
+.rows .tiles.hidden-next .t{color:var(--line)}
 .tiles.enter .t{animation:rise .3s cubic-bezier(.2,.8,.2,1) both}
 .tiles.enter .t:nth-child(2){animation-delay:.03s}.tiles.enter .t:nth-child(3){animation-delay:.06s}
 .tiles.enter .t:nth-child(4){animation-delay:.09s}.tiles.enter .t:nth-child(n+5){animation-delay:.12s}
@@ -73,7 +76,6 @@ svg.ico{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stro
 .progress i.sep{width:2px;height:16px;border:0;border-radius:1px;background:var(--line);margin:0 3px}
 .bar{height:6px;border-radius:3px;background:var(--surface-2);overflow:hidden;width:100%}
 .bar > span{display:block;height:100%;width:0;background:var(--accent)}
-.next{display:flex;flex-direction:column;gap:6px;padding-top:16px;border-top:1px dashed var(--line)}
 .helpbtn{align-self:flex-start;border:1px solid var(--line);background:transparent;border-radius:999px;padding:9px 16px;font-weight:600;display:flex;gap:10px;align-items:center}
 .helpbtn[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
 .helpbtn kbd{font-family:inherit;font-size:12px;opacity:.6;border:1px solid currentColor;border-radius:4px;padding:0 5px}
@@ -118,12 +120,15 @@ textarea{resize:vertical;min-height:76px;font-size:15px}
 .status i{width:8px;height:8px;border-radius:50%;background:var(--warn);display:inline-block}
 .status.ready i{background:var(--ok)}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(68px,1fr));gap:6px}
-.cell{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:6px 7px 5px;text-align:left;min-width:0}
+.grid{touch-action:pan-y;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.cell{border:1px solid var(--line);background:var(--bg);border-radius:8px;padding:6px 7px 5px;text-align:left;min-width:0;position:relative;cursor:pointer;min-height:54px}
+.cell .go{position:absolute;inset:auto 4px 4px auto;width:34px;height:34px;border-radius:50%;border:0;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;box-shadow:0 2px 8px rgba(0,0,0,.35)}
+.cell .go svg{width:16px;height:16px;fill:currentColor}
+.grid.dragging .cell{cursor:grabbing}
 .cell .i{font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
 .cell .n{font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .cell.inrange{background:var(--accent-soft);border-color:var(--accent)}
 .cell.start{box-shadow:inset 0 0 0 2px var(--ok)}
-.cell.start .i::after{content:" ▶";color:var(--ok)}
 .cell.bad .n{color:var(--warn)}
 .cell.playing{background:var(--ink);color:var(--bg)}
 .cell.playing .i{color:var(--bg)}
@@ -144,9 +149,15 @@ textarea{resize:vertical;min-height:76px;font-size:15px}
 .tempo .stepper button{width:40px;height:46px}
 .tempo output{font-size:20px;min-width:48px}
 .tempo .u{font-size:12px;color:var(--muted)}
+.meter{background:var(--bg);border:1px solid var(--line);border-radius:10px;height:46px;padding:0 8px;font-weight:600;font-size:16px;width:auto}
 .tempo input[type=range]{width:170px;accent-color:var(--accent)}
 @media (max-width:640px){ .loopbtn .st{display:inline} .tempo input[type=range],.tempo .u,.loopbtn .lt{display:none} .tbtn{width:44px;height:44px} .play{width:58px;height:58px} }
-@media (max-width:380px){ #restartBtn{display:none} }
+@media (max-width:480px){
+  body{padding-bottom:calc(168px + env(safe-area-inset-bottom, 0px))}
+  .tin{flex-wrap:wrap;row-gap:8px;justify-content:space-between}
+  .tempo{margin-left:0;width:100%}
+  .tempo input[type=range]{display:block;flex:1;width:auto;min-width:0}
+}
 
 /* sheets */
 .scrim{position:fixed;inset:0;background:rgba(8,6,4,.55);z-index:40;display:flex;align-items:flex-end;justify-content:center}
@@ -192,10 +203,9 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;color:var(--muted)}
 
 <main class="layout">
   <section class="stage">
-    <div class="stagehead"><div class="eyebrow">Ara</div><div class="row"><span class="countin" id="countLbl"></span><span class="flash" id="chordFlash">Canvi d'acord</span></div></div>
-    <div class="tiles big" id="arpNow" aria-live="polite"></div>
+    <div class="stagehead"><div class="eyebrow" id="stageLbl">Arpegis</div><div class="row"><span class="countin" id="countLbl"></span><span class="flash" id="chordFlash">Canvi d'acord</span></div></div>
+    <div class="rows" id="rows" aria-live="polite"></div>
     <div id="progress" class="progress" aria-hidden="true"></div>
-    <div class="next" id="nextWrap"><div class="eyebrow">Després</div><div class="tiles small" id="arpNext"></div></div>
     <button class="helpbtn" id="helpBtn" aria-pressed="false">Mostra l'acord <kbd>A</kbd></button>
     <div class="help" id="help" hidden>
       <div class="chords" id="chordView"></div>
@@ -238,7 +248,11 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;color:var(--muted)}
         <div class="seg" id="lapsSeg"><button data-v="new">Arpegis nous</button><button data-v="repeat">Els mateixos</button></div></div>
       <div class="field"><div class="lbl">L'11 dels acords majors i dominants</div>
         <div class="seg" id="s11Seg"><button data-v="sharp">♯11</button><button data-v="nat">11 natural</button></div></div>
-      <label class="switch"><span>Mostra l'arpegi següent</span><input type="checkbox" id="showNext"></label>
+      <div class="field" id="leadField"><div class="lbl">Quan apareix l'arpegi següent</div>
+        <div class="seg" id="leadSeg"><button data-v="slot">Tot seguit</button><button data-v="beats">Uns temps abans</button><button data-v="never">Mai</button></div>
+        <div class="row" id="leadRow" hidden><span class="hint grow">Temps d'antelació</span>
+          <div class="stepper"><button id="leadMinus" aria-label="Menys temps">−</button><output id="leadOut">2</output><button id="leadPlus" aria-label="Més temps">+</button></div></div>
+        <div class="hint" id="leadHint"></div></div>
       <button class="secondary" id="reshuffle">Genera arpegis nous</button>
     </div>
 
@@ -253,13 +267,8 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;color:var(--muted)}
     </div>
 
     <div class="pane" id="pane-str" hidden>
-      <div class="field"><label class="lbl" for="meterSel">Compàs</label>
-        <select id="meterSel"><option value="2/4">2/4</option><option value="3/4">3/4</option><option value="4/4">4/4</option><option value="5/4">5/4</option><option value="6/4">6/4</option><option value="7/4">7/4</option><option value="6/8">6/8</option><option value="9/8">9/8</option><option value="12/8">12/8</option></select>
-        <div class="hint">Cada acord conserva els compassos que dura. En compassos de x/8 el tempo compta corxeres.</div></div>
-      <div class="field"><div class="lbl">Quan toques un acord</div>
-        <div class="seg" id="tapSeg"><button data-v="start">Comença aquí</button><button data-v="range">Marca un tram</button></div>
-        <div class="hint" id="tapHint"></div></div>
-      <div class="row"><button class="secondary" id="clearRange">Treu el tram</button><button class="secondary" id="clearStart">Comença pel principi</button></div>
+      <div class="hint">Toca un acord per triar-lo i prem ▶, o fes-hi doble toc: sona des d'allà amb compte d'entrada.
+        Mantén premut i arrossega sobre uns quants acords per fer-ne un bucle. Doble toc a qualsevol acord per sortir del bucle.</div>
       <label class="switch"><span>Amaga els noms dels acords</span><input type="checkbox" id="hideNames"></label>
       <div class="grid" id="grid"></div>
     </div>
@@ -275,6 +284,7 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;color:var(--muted)}
       <svg class="ico" viewBox="0 0 24 24"><path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/></svg>
       <span id="loopLbl"></span></button>
     <div class="tempo">
+      <select id="meterSel" class="meter" aria-label="Compàs"><option value="2/4">2/4</option><option value="3/4">3/4</option><option value="4/4">4/4</option><option value="5/4">5/4</option><option value="6/4">6/4</option><option value="7/4">7/4</option><option value="6/8">6/8</option><option value="9/8">9/8</option><option value="12/8">12/8</option></select>
       <input type="range" id="tempoRange" min="30" max="320" step="1" aria-label="Tempo">
       <div class="stepper"><button id="tMinus" aria-label="Més lent">−</button><output id="tempoOut">120</output><button id="tPlus" aria-label="Més ràpid">+</button></div>
       <span class="u">bpm</span>
@@ -308,7 +318,7 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;color:var(--muted)}
       <div class="field"><div class="lbl">Tipus d'acord, en l'ordre que els vols tocar</div><div class="chips qchips" id="genQual"></div></div>
       <div class="cols">
         <div class="field"><label class="lbl" for="genCycle">Moviment</label>
-          <select id="genCycle"><option value="5">Per quartes</option><option value="7">Per quintes</option><option value="11">Cromàtic descendent</option><option value="1">Cromàtic ascendent</option><option value="10">Per tons descendents</option></select></div>
+          <select id="genCycle"></select></div>
         <div class="field"><label class="lbl" for="genRoot">Comença a</label><select id="genRoot"></select></div>
         <div class="field"><label class="lbl" for="genBars">Compassos per acord</label>
           <select id="genBars"><option value="0.5">½</option><option value="1" selected>1</option><option value="2">2</option><option value="4">4</option></select></div>

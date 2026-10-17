@@ -91,6 +91,21 @@ export function degreeInterval(chord, deg, opts = {}) {
   return chord.iv[map[deg] || deg] ?? 0;
 }
 
+/** Spells a chord degree with the right letter: C7's 7 is B♭ (not A♯). Double sharps/flats are simplified (E7♯9's ♯9 → G). */
+export function spellDegree(chord, deg, opts = {}) {
+  const L = 'CDEFGAB', NAT = [0, 2, 4, 5, 7, 9, 11];
+  const li = L.indexOf((chord.rootName || 'C')[0]);
+  let steps = (deg - 1) % 7;
+  if (deg === 7 && chord.six) steps = 5;           // 6 chords: the "7" slot is the 6th
+  if (deg === 3 && chord.sus4) steps = 3;          // sus4: the "3" slot is the 4th
+  const letter = (li + steps) % 7;
+  const pc = (chord.root + degreeInterval(chord, deg, opts)) % 12;
+  let diff = ((pc - NAT[letter]) % 12 + 12) % 12;
+  if (diff > 6) diff -= 12;
+  if (Math.abs(diff) !== 1 && diff !== 0) return noteName(pc, diff < 0);
+  return L[letter] + ({ '-1': '♭', 0: '', 1: '♯' }[diff]);
+}
+
 export function noteName(pc, flat) {
   return (flat ? FLATS : SHARPS)[((pc % 12) + 12) % 12].replace('b', '♭').replace('#', '♯');
 }

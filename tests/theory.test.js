@@ -67,3 +67,15 @@ test('families', () => {
   assert.equal(family(parseChord('D-9')), 'menor');
   assert.equal(family(parseChord('Bh7')), 'm7♭5');
 });
+test('degrees are spelled with the right letter', async () => {
+  const { spellDegree } = await import('../src/theory.js');
+  const sp = (l, degs, o) => degs.map(d => spellDegree(parseChord(l), d, o)).join(' ');
+  assert.equal(sp('C9', [1, 3, 5, 7, 9]), 'C E G B♭ D');
+  assert.equal(sp('D-7', [3, 7]), 'F C');
+  assert.equal(sp('Bh7', [3, 5, 7]), 'D F A');
+  assert.equal(sp('E7#9', [9]), 'G');
+  assert.equal(sp('F#^7', [3, 7, 11]), 'A♯ E♯ B♯');
+  assert.equal(sp('Bb^7', [11], { sharp11: false }), 'E♭');
+  assert.equal(sp('Ebo7', [3, 5, 7]), 'G♭ A C');
+  assert.equal(sp('C69', [7]), 'A');
+});

@@ -1,6 +1,6 @@
 // JazzDojo app: state, persistence, scheduling loop and UI wiring.
-import { parseChord, pretty, noteName, degreeInterval, family, FLATS, DEGREES } from './theory.js';
-import { parseIReal, parseTextChords, eventsToText, generateCycle, QUALS } from './ireal.js';
+import { parseChord, pretty, spellDegree, family, FLATS, DEGREES } from './theory.js';
+import { parseIReal, parseTextChords, eventsToText, generateCycle, cycleRoots, QUALS, CYCLES } from './ireal.js';
 import { ArpEngine } from './arps.js';
 import { Sequencer, layout } from './sequencer.js';
 import { Groove } from './groove.js';
@@ -20,8 +20,8 @@ const DEF = {
   degrees: [1, 3, 5, 7, 9], len: 5, onlyWritten: false, source: 'random', order: 'shuffle',
   sets: [{ id: 'set1', name: 'Bàsics', text: '13579, 53971, 97531, 35791, 1357, 7531' }], setId: 'set1',
   change: 'chord', every: { beats: 2, bars: 2, seconds: 4 }, syncChord: true, laps: 'new', sharp11: true,
-  showNext: true, countIn: true, harmony: 'piano', theme: 'dark', vol: { bass: 0.8, drums: 0.7, comp: 0.6, master: 0.85 },
-  songId: null, songPrefs: {}, tap: 'start', hideNames: false,
+  lead: 'slot', leadBeats: 2, countIn: true, harmony: 'piano', theme: 'dark', vol: { bass: 0.8, drums: 0.7, comp: 0.6, master: 0.85 },
+  songId: null, songPrefs: {}, hideNames: false,
 };
 const S = Object.assign({}, DEF, store.get('jd.settings', {}));
 S.vol = Object.assign({}, DEF.vol, S.vol || {});
@@ -47,10 +47,10 @@ const saveLib = () => store.set('jd.library', library);
 /* ---------------- runtime state ---------------- */
 let song = null;      // library entry
 let seq = null;       // Sequencer for the laid-out song
-const UI = { start: 0, range: null, loop: 'off', help: false, tapA: null };
+const UI = { start: 0, range: null, loop: 'off', help: false, sel: null };
 const audio = new AudioEngine('samples/');
 const groove = new Groove();
-const P = { playing: false, paused: false, next: 0, timer: null, vis: [], k: 0, nextK: 1, slotChord: {}, bar: null, endAt: 0 };
+const P = { playing: false, paused: false, next: 0, timer: null, vis: [], k: 0, nextK: 1, disp: 0, revealed: true, slotChord: {}, bar: null, endAt: 0 };
 
 const prefs = () => (S.songPrefs[song.id] ||= {});
 const tempo = () => prefs().tempo || song.bpm || 120;
@@ -108,7 +108,7 @@ async function play() {
   seq.reset(UI.start);
   P.slotChord = {};
   P.slotChord[0] = seq.E[seq.ev].chord;
-  Object.assign(P, { playing: true, paused: false, vis: [], endAt: 0 });
+  Object.assign(P, { playing: true, paused: false, vis: [], endAt: 0, disp: -1 });
   const m = song.meter, spb = 60 / tempo();
   let t = audio.now + 0.12;
   if (S.countIn) {
@@ -145,7 +145,7 @@ async function restart() {
   arps.reset();
   seq.reset(UI.start);
   P.slotChord = { 0: seq.E[seq.ev].chord };
-  P.vis = [];
+  P.vis = []; P.disp = -1;
   P.next = audio.now + 0.08;
   setPlayIcon();
 }
@@ -168,7 +168,17 @@ function onBeat(b) {
     if (S.change === 'chord' && b.nextEv) P.slotChord[c.nextK] = b.nextEv.chord;
     arpAt(c.k); arpAt(c.nextK);
     const k = c.k, nk = c.nextK;
-    P.vis.push({ t: c.t, f: () => showArp(k, nk, true, c) });
+    const revealNow = S.lead === 'slot' || (S.lead === 'beats' && c.len != null && c.len <= S.leadBeats);
+    P.vis.push({ t: c.t, f: () => showArp(k, nk, true, c, revealNow) });
+    if (S.lead === 'beats' && c.lenSec) { // seconds mode: reveal a few beats before the next change
+      const tr = Math.max(c.t, c.t + c.lenSec - S.leadBeats * b.spb);
+      P.vis.push({ t: tr, f: () => { if (P.k === k) revealNext(); } });
+    }
+  }
+  // beat-based slots: reveal the next arpeggio when only `leadBeats` beats remain
+  if (S.lead === 'beats' && S.change !== 'seconds' && b.slotLen - b.inSlot === S.leadBeats && !b.changes.length) {
+    const k = b.k;
+    P.vis.push({ t: b.t, f: () => { if (P.k === k) revealNext(); } });
   }
   const chordOnly = b.chordStart && !b.changes.some(c => Math.abs(c.t - b.t) < 1e-6);
   const info = { evIdx: b.evIdx, bar: b.barNo, lap: b.lap, inSlot: b.inSlot, slotLen: b.slotLen, up: b.upcoming, chordOnly };
@@ -191,16 +201,41 @@ function visLoop() {
   requestAnimationFrame(visLoop);
 }
 const tilesHTML = arr => arr.map(d => `<span class="t">${d}</span>`).join('');
-function showArp(k, nk, animate, c) {
+const dotsHTML = n => Array.from({ length: n }, () => '<span class="t">·</span>').join('');
+/** Shows slot k as the active row. Two rows of equal size alternate: the active one has its first digit in red,
+ *  the other shows the next arpeggio (when it's time to reveal it). Short ordered lists show every pattern as a fixed row. */
+function showArp(k, nk, isChange, c, reveal = S.lead === 'slot') {
+  if (isChange) P.disp++;
   P.k = k; P.nextK = nk;
-  const el = $('arpNow');
-  el.innerHTML = tilesHTML(arpAt(k));
-  $('arpNext').innerHTML = tilesHTML(arpAt(nk));
-  if (animate) { el.classList.remove('enter'); void el.offsetWidth; el.classList.add('enter'); }
-  $('nextWrap').hidden = !S.showNext;
+  P.revealed = reveal;
   if (c && c.lenSec) { P.bar = { t0: c.t, t1: c.t + c.lenSec }; $('progress').innerHTML = '<div class="bar"><span></span></div>'; }
   else P.bar = null;
+  renderRows(isChange);
   if (UI.help) renderHelp();
+}
+function revealNext() { if (!P.revealed) { P.revealed = true; renderRows(false, true); } }
+function renderRows(isChange, revealing) {
+  const box = $('rows');
+  const fixed = arps.fixedRows();
+  if (fixed) {
+    const act = Math.max(0, arps.sourceIndex(P.k));
+    box.className = 'rows r' + fixed.length;
+    box.innerHTML = fixed.map((p, i) => `<div class="tiles ${i === act ? 'active' : ''}">${tilesHTML(p)}</div>`).join('');
+    $('stageLbl').textContent = 'Els teus patrons, en ordre';
+    return;
+  }
+  box.className = 'rows r2';
+  const cur = arpAt(P.k), nxt = arpAt(P.nextK);
+  const activeRow = P.disp % 2;
+  const show = P.revealed && S.lead !== 'never';
+  const rowHTML = i => i === activeRow
+    ? `<div class="tiles active">${tilesHTML(cur)}</div>`
+    : `<div class="tiles ${show ? '' : 'hidden-next'}">${show ? tilesHTML(nxt) : dotsHTML(nxt.length)}</div>`;
+  box.innerHTML = rowHTML(0) + rowHTML(1);
+  // animate only the row whose content changed (the next one), never the one being played
+  const changed = box.children[1 - activeRow];
+  if ((isChange || revealing) && show) { changed.classList.add('enter'); }
+  $('stageLbl').textContent = 'Arpegis';
 }
 function renderDots(inSlot, len, bpb) {
   const box = $('progress');
@@ -228,8 +263,8 @@ function restAll() {
   const i = seq.startIndex(UI.start);
   P.slotChord = { 0: seq.E[i].chord };
   if (S.change === 'chord') { const n = seq.nextIdx(i); if (n >= 0) P.slotChord[1] = seq.E[n].chord; }
-  P.up = seq.upcoming(i); P.pos = null; P.bar = null;
-  showArp(0, 1, false);
+  P.up = seq.upcoming(i); P.pos = null; P.bar = null; P.disp = 0;
+  showArp(0, 1, false, null, S.lead !== 'never');
   $('countLbl').textContent = '';
   $('progress').innerHTML = '';
   highlightCell(-1);
@@ -242,7 +277,7 @@ function renderHelp() {
   $('chordView').innerHTML = up.map((ix, j) => {
     if (ix == null || ix < 0) return `<div class="c"><div class="eyebrow">${labels[j]}</div><div class="n">—</div></div>`;
     const ev = seq.E[ix];
-    const notes = j === 0 && ev.chord ? arpAt(P.k).map(d => noteName(ev.chord.root + degreeInterval(ev.chord, d, arpOpts()), ev.chord.flat)).join(' ') : '';
+    const notes = j === 0 && ev.chord ? arpAt(P.k).map(d => spellDegree(ev.chord, d, arpOpts())).join(' ') : '';
     return `<div class="c ${j === 0 ? 'cur' : ''}"><div class="eyebrow">${labels[j]}</div><div class="n">${esc(pretty(ev.label))}</div>${notes ? `<div class="notes">${notes}</div>` : ''}</div>`;
   }).join('');
   const N = seq.E.length;
@@ -290,16 +325,15 @@ function renderLoop() {
 function renderHead() {
   $('songTitle').textContent = song.title;
   $('songMeta').textContent = `${song.events.length} acords · ${meterStr(song.meter)}`;
+  $('meterSel').value = meterStr(song.meter);
 }
 function renderTempo() { $('tempoOut').textContent = tempo(); $('tempoRange').value = tempo(); }
+const PLAY_SVG = '<svg viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg>';
 function renderGrid() {
   const g = $('grid');
   g.classList.toggle('hidenames', !!S.hideNames);
-  const [a, b] = UI.range || [-1, -1];
-  g.innerHTML = seq.E.map((e, i) => `<button class="cell ${i >= a && i <= b ? 'inrange' : ''} ${i === UI.start ? 'start' : ''} ${e.label && !e.chord ? 'bad' : ''}" data-i="${i}"><div class="i">${i + 1}</div><div class="n">${esc(pretty(e.label))}</div></button>`).join('');
-  $('tapHint').textContent = S.tap === 'start' ? 'Toca un acord per començar des d\'allà. Si ja sona, hi salta.'
-    : (UI.tapA != null ? `Primer acord: ${UI.tapA + 1}. Ara toca l'últim del tram.` : 'Toca el primer i l\'últim acord del tram. El bucle passa a «tram».');
-  $('meterSel').value = meterStr(song.meter);
+  const [a, b] = UI.loop === 'range' && UI.range ? UI.range : [-1, -1];
+  g.innerHTML = seq.E.map((e, i) => `<div class="cell ${i >= a && i <= b ? 'inrange' : ''} ${i === UI.start ? 'start' : ''} ${e.label && !e.chord ? 'bad' : ''}" data-i="${i}" role="button" tabindex="0" aria-label="Acord ${i + 1}"><div class="i">${i + 1}</div><div class="n">${esc(pretty(e.label))}</div>${i === UI.sel ? `<button class="go" data-go="${i}" aria-label="Toca des d'aquí">${PLAY_SVG}</button>` : ''}</div>`).join('');
   if (P.playing && P.pos) highlightCell(P.pos.evIdx);
 }
 function highlightCell(i) {
@@ -323,7 +357,12 @@ function renderArpPane() {
   $('syncChord').checked = !!S.syncChord;
   $('everyLbl').textContent = { beats: 'Cada quants temps', bars: 'Cada quants compassos', seconds: 'Cada quants segons' }[S.change] || '';
   $('everyOut').textContent = S.change === 'seconds' ? S.every.seconds.toFixed(1).replace('.0', '') : S.every[S.change];
-  $('showNext').checked = S.showNext;
+  setSeg('leadSeg', S.lead);
+  $('leadRow').hidden = S.lead !== 'beats';
+  $('leadOut').textContent = S.leadBeats;
+  $('leadField').hidden = !!arps.fixedRows();
+  $('leadHint').textContent = S.lead === 'slot' ? 'Veus el següent arpegi des que comences l\'actual.'
+    : S.lead === 'beats' ? `El següent apareix ${S.leadBeats} ${S.leadBeats === 1 ? 'temps' : 'temps'} abans del canvi: menys temps per pensar.` : 'No veus el següent fins que l\'has de tocar.';
 }
 function renderSoPane() {
   setSeg('styleSeg', style()); setSeg('harmSeg', S.harmony);
@@ -337,11 +376,11 @@ function applyTheme() {
   const meta = document.querySelector('meta[name="theme-color"]');
   if (meta) meta.content = S.theme === 'light' ? '#EFEAE0' : '#17140F';
 }
-function renderAll() { renderHead(); renderTempo(); renderLoop(); renderGrid(); renderArpPane(); renderSoPane(); setSeg('tapSeg', S.tap); $('hideNames').checked = !!S.hideNames; $('help').hidden = !UI.help; renderHelp(); }
+function renderAll() { renderHead(); renderTempo(); renderLoop(); renderGrid(); renderArpPane(); renderSoPane(); $('hideNames').checked = !!S.hideNames; $('help').hidden = !UI.help; renderHelp(); }
 
 /* ---------------- arpeggio settings changes ---------------- */
 function arpsChanged() {
-  if (P.playing) { arps.reset(P.k); showArp(P.k, P.nextK, false); }
+  if (P.playing) { arps.reset(P.k); renderRows(false, true); }
   else { arps.reset(); restAll(); }
 }
 
@@ -352,7 +391,7 @@ $('restartBtn').onclick = restart;
 $('loopBtn').onclick = () => {
   const order = UI.range ? ['off', 'all', 'range'] : ['off', 'all'];
   UI.loop = order[(order.indexOf(UI.loop) + 1) % order.length];
-  renderLoop(); savePrefs();
+  renderLoop(); savePrefs(); renderGrid();
   if (!P.playing) restAll(); else renderHelp();
 };
 const setTempo = v => { prefs().tempo = Math.max(30, Math.min(320, Math.round(v))); saveS(); renderTempo(); };
@@ -367,8 +406,8 @@ document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => {
   document.querySelectorAll('.pane').forEach(p => { p.hidden = p.id !== b.dataset.pane; });
 });
 const segVal = e => e.target.closest('button')?.dataset.v;
-$('srcSeg').onclick = e => { const v = segVal(e); if (!v) return; S.source = v; saveS(); renderArpPane(); arpsChanged(); };
-$('orderSeg').onclick = e => { const v = segVal(e); if (!v) return; S.order = v; saveS(); renderArpPane(); arpsChanged(); };
+$('srcSeg').onclick = e => { const v = segVal(e); if (!v) return; S.source = v; saveS(); arpsChanged(); renderArpPane(); };
+$('orderSeg').onclick = e => { const v = segVal(e); if (!v) return; S.order = v; saveS(); arpsChanged(); renderArpPane(); };
 $('changeSeg').onclick = e => { const v = segVal(e); if (!v) return; S.change = v; saveS(); renderArpPane(); if (P.playing) seq.forceSlot = true; else restAll(); };
 $('lapsSeg').onclick = e => { const v = segVal(e); if (!v) return; S.laps = v; saveS(); renderArpPane(); };
 $('s11Seg').onclick = e => { const v = segVal(e); if (!v) return; S.sharp11 = v === 'sharp'; saveS(); renderArpPane(); renderHelp(); };
@@ -389,7 +428,9 @@ function stepEvery(dir) {
 $('everyMinus').onclick = () => stepEvery(-1);
 $('everyPlus').onclick = () => stepEvery(1);
 $('syncChord').onchange = e => { S.syncChord = e.target.checked; saveS(); };
-$('showNext').onchange = e => { S.showNext = e.target.checked; saveS(); $('nextWrap').hidden = !S.showNext; };
+$('leadSeg').onclick = e => { const v = segVal(e); if (!v) return; S.lead = v; saveS(); renderArpPane(); if (!P.playing) restAll(); else renderRows(false, true); };
+$('leadMinus').onclick = () => { S.leadBeats = Math.max(1, S.leadBeats - 1); saveS(); renderArpPane(); };
+$('leadPlus').onclick = () => { S.leadBeats = Math.min(16, S.leadBeats + 1); saveS(); renderArpPane(); };
 $('reshuffle').onclick = arpsChanged;
 // pattern sets
 const curSet = () => S.sets.find(x => x.id === S.setId) || S.sets[0];
@@ -403,7 +444,7 @@ $('setDel').onclick = e => {
 };
 $('setName').oninput = e => { curSet().name = e.target.value || 'Sense nom'; saveS(); const o = $('setSel').selectedOptions[0]; if (o) o.textContent = curSet().name; };
 let patT = 0;
-$('patterns').oninput = e => { curSet().text = e.target.value; saveS(); clearTimeout(patT); patT = setTimeout(arpsChanged, 400); };
+$('patterns').oninput = e => { curSet().text = e.target.value; saveS(); clearTimeout(patT); patT = setTimeout(() => { arpsChanged(); renderArpPane(); }, 400); };
 // sound
 $('styleSeg').onclick = e => { const v = segVal(e); if (!v) return; prefs().style = v; saveS(); setSeg('styleSeg', v); };
 $('harmSeg').onclick = e => { const v = segVal(e); if (!v) return; S.harmony = v; saveS(); setSeg('harmSeg', v); if (audio.ctx) audio.load(v); renderSoundStatus(); };
@@ -412,24 +453,85 @@ $('mixer').oninput = e => { const k = e.target.dataset.k; if (!k) return; S.vol[
 audio.setVolumes(S.vol);
 // structure
 $('meterSel').onchange = e => { stop(); song.meter = parseMeter(e.target.value); saveLib(); buildSeq(); restAll(); renderAll(); };
-$('tapSeg').onclick = e => { const v = segVal(e); if (!v) return; S.tap = v; UI.tapA = null; saveS(); setSeg('tapSeg', v); renderGrid(); };
 $('hideNames').onchange = e => { S.hideNames = e.target.checked; saveS(); renderGrid(); };
-$('clearRange').onclick = () => { UI.range = null; UI.tapA = null; if (UI.loop === 'range') UI.loop = 'all'; savePrefs(); renderGrid(); renderLoop(); if (!P.playing) restAll(); };
-$('clearStart').onclick = () => { UI.start = 0; savePrefs(); renderGrid(); if (!P.playing) restAll(); };
-$('grid').onclick = e => {
-  const c = e.target.closest('.cell'); if (!c) return;
-  const i = +c.dataset.i;
-  if (S.tap === 'start') {
-    UI.start = i; savePrefs();
-    if (P.playing) seq.jump(i); else restAll();
-  } else {
-    if (UI.tapA == null) { UI.tapA = i; UI.range = [i, i]; }
-    else { UI.range = [Math.min(UI.tapA, i), Math.max(UI.tapA, i)]; UI.tapA = null; UI.loop = 'range'; renderLoop(); }
-    savePrefs();
-    if (!P.playing) restAll();
-  }
+
+/* Chord grid gestures:
+   tap → select the chord (shows a ▶ button that plays from there)
+   double tap → leave the loop and stop if there is a range loop; otherwise play from that chord
+   press-and-hold + drag (or mouse drag) → select a range, which loops straight away */
+function playFrom(i) {
+  UI.start = i; UI.sel = null; savePrefs();
+  if (P.playing) stop();
   renderGrid();
-};
+  play();
+}
+const G = { down: null, timer: 0, dragging: false, a: -1, b: -1, lastTap: { i: -1, t: 0 } };
+const cellAt = (x, y) => { const el = document.elementFromPoint(x, y); const c = el && el.closest('#grid .cell'); return c ? +c.dataset.i : -1; };
+function paintDrag() {
+  const [a, b] = [Math.min(G.a, G.b), Math.max(G.a, G.b)];
+  $('grid').querySelectorAll('.cell').forEach(c => { const i = +c.dataset.i; c.classList.toggle('inrange', i >= a && i <= b); });
+}
+function startDrag() {
+  G.dragging = true; $('grid').classList.add('dragging');
+  if (navigator.vibrate) try { navigator.vibrate(12); } catch (e) { /* ignore */ }
+  paintDrag();
+}
+$('grid').addEventListener('pointerdown', e => {
+  if (e.target.closest('.go')) return;
+  const i = cellAt(e.clientX, e.clientY); if (i < 0) return;
+  G.down = { x: e.clientX, y: e.clientY, id: e.pointerId, type: e.pointerType };
+  G.a = G.b = i; G.dragging = false;
+  clearTimeout(G.timer);
+  if (e.pointerType === 'mouse') { /* mouse: dragging starts as soon as it moves to another chord */ }
+  else G.timer = setTimeout(() => { if (G.down) startDrag(); }, 320);
+});
+window.addEventListener('pointermove', e => {
+  if (!G.down || e.pointerId !== G.down.id) return;
+  const moved = Math.hypot(e.clientX - G.down.x, e.clientY - G.down.y);
+  if (!G.dragging) {
+    if (G.down.type === 'mouse') { const i = cellAt(e.clientX, e.clientY); if (i >= 0 && i !== G.a) startDrag(); else return; }
+    else { if (moved > 10) { clearTimeout(G.timer); G.down = null; } return; } // a scroll, not a long press
+  }
+  const i = cellAt(e.clientX, e.clientY);
+  if (i >= 0 && i !== G.b) { G.b = i; paintDrag(); }
+});
+// while dragging on touch screens, stop the page from scrolling
+$('grid').addEventListener('touchmove', e => { if (G.dragging) e.preventDefault(); }, { passive: false });
+window.addEventListener('pointerup', e => {
+  if (!G.down || e.pointerId !== G.down.id) return;
+  clearTimeout(G.timer);
+  const wasDrag = G.dragging;
+  G.down = null; G.dragging = false; $('grid').classList.remove('dragging');
+  if (wasDrag) {
+    const a = Math.min(G.a, G.b), b = Math.max(G.a, G.b);
+    UI.range = [a, b]; UI.loop = 'range'; UI.start = a; UI.sel = null;
+    savePrefs(); renderLoop(); renderGrid();
+    if (!P.playing) restAll(); else renderHelp();
+    return;
+  }
+  onTap(G.a);
+});
+window.addEventListener('pointercancel', () => { clearTimeout(G.timer); G.down = null; if (G.dragging) { G.dragging = false; $('grid').classList.remove('dragging'); renderGrid(); } });
+function onTap(i) {
+  const now = performance.now();
+  const dbl = G.lastTap.i === i && now - G.lastTap.t < 350;
+  G.lastTap = { i, t: dbl ? 0 : now };
+  if (dbl) {
+    if (UI.loop === 'range' && UI.range) {
+      UI.range = null; UI.loop = 'off'; UI.sel = null;
+      savePrefs(); renderLoop(); stop(); renderGrid();
+    } else playFrom(i);
+    return;
+  }
+  UI.sel = i; UI.start = i; savePrefs();
+  renderGrid();
+  if (!P.playing) restAll();
+}
+$('grid').addEventListener('click', e => { const g = e.target.closest('.go'); if (g) { e.stopPropagation(); playFrom(+g.dataset.go); } });
+$('grid').addEventListener('keydown', e => {
+  const c = e.target.closest('.cell'); if (!c) return;
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); playFrom(+c.dataset.i); }
+});
 document.addEventListener('keydown', e => {
   if (e.target.closest('input,textarea,select') || !$('libSheet').hidden || !$('editSheet').hidden) return;
   if (e.code === 'Space') { e.preventDefault(); play(); }
@@ -509,10 +611,11 @@ $('fileIn').onchange = e => { const f = e.target.files[0]; if (!f) return; const
 // generator
 const gen = { quals: ['^9', '9', '-9'] };
 $('genRoot').innerHTML = FLATS.map((n, i) => `<option value="${i}">${n.replace('b', '♭')}</option>`).join('');
+$('genCycle').innerHTML = CYCLES.map(([st, name]) => `<option value="${st}">${name}</option>`).join('');
 function renderGen() {
   $('genQual').innerHTML = QUALS.map(([q, n]) => { const ix = gen.quals.indexOf(q); return `<button class="chip" data-q="${q}" aria-pressed="${ix >= 0}">${n}${ix >= 0 ? `<span class="o">${ix + 1}</span>` : ''}</button>`; }).join('');
   const step = +$('genCycle').value, r = +$('genRoot').value;
-  const g = generateCycle(['7'], step, r, 1).events.map(e => e.label.replace('7', '').replace('b', '♭'));
+  const g = cycleRoots(step, r).map(x => FLATS[x].replace('b', '♭'));
   $('genPreview').textContent = gen.quals.length ? `${gen.quals.length * 12} acords. Fonamentals: ${g.join(' ')}` : 'Tria almenys un tipus d\'acord.';
 }
 $('genQual').onclick = e => { const q = e.target.closest('button')?.dataset.q; if (!q) return; gen.quals = gen.quals.includes(q) ? gen.quals.filter(x => x !== q) : [...gen.quals, q]; renderGen(); };
@@ -521,7 +624,7 @@ $('genRoot').onchange = renderGen;
 $('genBtn').onclick = () => {
   if (!gen.quals.length) return;
   const s = generateCycle(gen.quals, +$('genCycle').value, +$('genRoot').value, +$('genBars').value, parseMeter($('genMeter').value));
-  s.goals = [{ 5: 'cicle de quartes', 7: 'cicle de quintes', 11: 'cromàtic', 1: 'cromàtic', 10: 'tons' }[$('genCycle').value]];
+  s.goals = [(CYCLES.find(c => c[0] === +$('genCycle').value) || [0, ''])[1].toLowerCase()];
   s.key = 'totes';
   addSongs([s]);
   $('libSheet').hidden = true;

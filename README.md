@@ -8,8 +8,15 @@ Funciona a l'iPhone, a l'iPad i al Mac des del navegador, i es pot instal·lar c
 
 ## Com s'utilitza
 
-- **Pantalla de pràctica:** a dalt surt l'arpegi actual en gran i, a sota, el següent. Els punts marquen els temps
-  que queden fins al canvi; en mode segons és una barra.
+- **Pantalla de pràctica:**
+  - Hi ha dues files d'arpegis de la mateixa mida. La que estàs tocant té el primer número en vermell; l'altra mostra
+    el següent arpegi, tot en blanc.
+  - Quan canvia l'arpegi, el següent no puja de lloc: es queda on era i el seu primer número es posa vermell. Llavors
+    l'altra fila passa a mostrar el que vindrà després.
+  - Els punts marquen els temps que queden fins al canvi; en mode segons és una barra.
+  - Pots triar quan apareix el següent arpegi: tot seguit, uns temps abans del canvi (menys temps per pensar) o mai.
+  - Si fas servir els teus patrons en ordre i en tens 4 o menys, es veuen tots alhora com a files fixes, i el vermell
+    va passant d'una fila a l'altra.
 - **Mostra l'acord** (tecla `A`): ensenya l'acord actual i els dos següents, les notes reals de l'arpegi, i la
   posició (acord, compàs i volta). La música no s'atura en cap moment.
 - **Arpegis:**
@@ -23,18 +30,23 @@ Funciona a l'iPhone, a l'iPad i al Mac des del navegador, i es pot instal·lar c
 - **Bucle:**
   - Pots no fer bucle, repetir-ho tot o repetir un tram.
   - A cada volta, tries si surten arpegis nous o els mateixos.
+- **Graella d'acords (Estructura):**
+  - Toca un acord per triar-lo i prem el ▶ que hi apareix, o fes-hi doble toc: sona des d'allà, amb compte d'entrada.
+  - Mantén premut i arrossega sobre uns quants acords: aquell tram queda en bucle. Amb el ratolí, n'hi ha prou
+    d'arrossegar.
+  - Doble toc a qualsevol acord per sortir del bucle (també s'atura la música).
 - **Altres controls:**
-  - Tocant un acord a **Estructura** comences des d'allà, o hi saltes si ja sona.
   - Restart (`R`), play/pausa (espai), stop (`Esc`) i tempo (fletxes).
 - **So:**
   - Estil: swing, bossa, pop/8es o balada.
   - Harmonia: piano, Rhodes o guitarra.
   - Mesclador de baix, bateria, harmonia i volum general.
-- **Compàs:** es pot canviar el compàs de qualsevol exercici (2/4 … 7/4, 6/8, 9/8, 12/8). Cada acord manté els
+- **Compàs:** es tria a la barra inferior, al costat del tempo (2/4 … 7/4, 6/8, 9/8, 12/8). Cada acord manté els
   compassos que durava.
 - **Exercicis:**
-  - Pots importar d'iReal Pro, escriure acords a mà o generar cicles (quartes, quintes, cromàtic, tons) amb els
-    tipus d'acord en l'ordre que vulguis.
+  - Pots importar d'iReal Pro, escriure acords a mà o generar cicles amb els tipus d'acord en l'ordre que vulguis.
+  - Els cicles poden anar per qualsevol interval: quartes, quintes, cromàtic, tons, terceres menors o majors (pujant
+    o baixant) i trítons. Si un interval no passa per les dotze notes, el cicle continua des d'un semitò més enllà.
   - Cada exercici té nom, tonalitat, objectius i una dificultat per colors de cinturó. Es poden editar, duplicar,
     esborrar, cercar i filtrar.
 
@@ -93,6 +105,8 @@ python3 tools/logo.py <Saira-Black.ttf> <Saira-SemiBold.ttf> public/icons
 - **iPhone:** el so s'atura si es bloqueja la pantalla, i per això l'app manté la pantalla encesa mentre sona. Si no
   se sent res, comprova l'interruptor de silenci.
 - **Dades locals:** els exercicis i els ajustos es guarden al navegador de cada dispositiu i no se sincronitzen.
+- **Ajuda:** les notes de l'arpegi s'escriuen amb la lletra que toca (el 7 de C7 és B♭, no A♯). Els dobles sostinguts i
+  bemolls se simplifiquen.
 - **Mostres:** són d'una sola capa de dinàmica per nota (bancs de so General MIDI), així que el so és més senzill que
   el d'iReal Pro.
 

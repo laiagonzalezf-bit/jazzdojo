@@ -42,3 +42,13 @@ test('only written degrees restricts to the chord symbol', () => {
   const c = parseChord('C^7');
   for (let k = 0; k < 30; k++) assert.ok(e.at(k, () => c).every(d => [1, 3, 5, 7].includes(d)));
 });
+test('short ordered lists are shown as fixed rows and slots know their row', () => {
+  const s = { source: 'list', patterns: '13579, 53971, 97531', order: 'seq' };
+  const e = new ArpEngine(() => s, rng(2));
+  assert.equal(e.fixedRows().length, 3);
+  for (let k = 0; k < 7; k++) { e.at(k); assert.equal(e.sourceIndex(k), k % 3); }
+  s.patterns = '1, 3, 5, 7, 9';
+  assert.equal(new ArpEngine(() => s).fixedRows(), null);
+  s.patterns = '13579'; s.order = 'shuffle';
+  assert.equal(new ArpEngine(() => s).fixedRows(), null);
+});

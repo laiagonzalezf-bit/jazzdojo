@@ -55,3 +55,14 @@ test('cycle generator', () => {
   const wt = generateCycle(['7'], 10, 0, 1).events.map(e => e.label);
   assert.equal(new Set(wt).size, 12);
 });
+test('every movement covers the twelve roots exactly once', async () => {
+  const { cycleRoots, CYCLES } = await import('../src/ireal.js');
+  for (const [step] of CYCLES) {
+    const r = cycleRoots(step, 0);
+    assert.equal(r.length, 12, `step ${step}`);
+    assert.equal(new Set(r).size, 12, `step ${step}`);
+    assert.equal(r[0], 0);
+    assert.equal(r[1], step % 12, `step ${step}`);
+  }
+  assert.deepEqual(CYCLES.slice(0, 6).map(c => c[0]), [5, 7, 1, 11, 2, 10]);
+});

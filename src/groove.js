@@ -80,9 +80,9 @@ export class Groove {
   }
 
   /** Close rootless voicing with smooth voice leading. */
-  voicing(ch, lo, hi, maxNotes = 4) {
+  voicing(ch, lo, hi, maxNotes = 4, center = (lo + hi) / 2) {
     const pcs = ch.tones.slice(0, maxNotes).map(i => (ch.root + i) % 12);
-    const target = this.lastVoicing ? this.lastVoicing.reduce((a, b) => a + b, 0) / this.lastVoicing.length : (lo + hi) / 2;
+    const target = this.lastVoicing ? this.lastVoicing.reduce((a, b) => a + b, 0) / this.lastVoicing.length : center;
     let best = null, bestScore = 1e9;
     for (let r = 0; r < pcs.length; r++) {
       const order = pcs.slice(r).concat(pcs.slice(0, r));
@@ -92,10 +92,12 @@ export class Groove {
         for (let k = 1; k < order.length; k++) { let m = notes[k - 1] + 1; while (m % 12 !== order[k]) m++; notes.push(m); }
         if (notes[notes.length - 1] > hi) continue;
         const avg = notes.reduce((a, b) => a + b, 0) / notes.length;
-        const score = Math.abs(avg - target) + Math.abs(avg - (lo + hi) / 2) * 0.25;
+        // follow the previous voicing, but keep pulling towards the middle so the comping doesn't creep upwards
+        const score = Math.abs(avg - target) + Math.abs(avg - center) * 0.7 + Math.max(0, notes[notes.length - 1] - (hi - 3)) * 1.5;
         if (score < bestScore) { bestScore = score; best = notes; }
       }
     }
+    if (!best && hi < lo + 30) return this.voicing(ch, lo, hi + 3, maxNotes, center); // wide voicing: allow a little more room
     this.lastVoicing = best || [lo + 10, lo + 14, lo + 17];
     return this.lastVoicing;
   }
@@ -179,7 +181,7 @@ export class Groove {
     /* ---------- harmony ---------- */
     const inst = o.harmony || 'piano';
     if (info.chordStart) {
-      this.voice = inst === 'guitar' ? this.voicing(ch, 52, 72, 3) : this.voicing(ch, 50, 76, 4);
+      this.voice = inst === 'guitar' ? this.voicing(ch, 52, 70, 3, 59) : this.voicing(ch, 50, 72, 4, 60);
       this.compPlan = [];
     }
     const v = this.voice;

@@ -185,18 +185,30 @@ export function eventsToText(events) {
 
 export const QUALS = [['^7', 'Δ7'], ['^9', 'Δ9'], ['69', '6/9'], ['-7', 'm7'], ['-9', 'm9'], ['-11', 'm11'], ['-^7', 'mΔ7'],
   ['7', '7'], ['9', '9'], ['13', '13'], ['7b9', '7♭9'], ['7alt', '7alt'], ['7sus', '7sus4'], ['h7', 'ø7'], ['o7', '°7']];
-export const CYCLES = { 5: 'per quartes', 7: 'per quintes', 11: 'cromàtic ↓', 1: 'cromàtic ↑', 10: 'per tons ↓' };
+// Movement between consecutive roots, in semitones upwards (mod 12). Order as shown in the generator.
+export const CYCLES = [
+  [5, 'Per quartes'], [7, 'Per quintes'], [1, 'Cromàtic ascendent'], [11, 'Cromàtic descendent'],
+  [2, 'Per tons ascendents'], [10, 'Per tons descendents'], [3, 'Per terceres menors ascendents'], [9, 'Per terceres menors descendents'],
+  [4, 'Per terceres majors ascendents'], [8, 'Per terceres majors descendents'], [6, 'Per trítons'],
+];
+const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+/** The twelve roots for a movement. Steps that don't reach all twelve notes (tones, thirds, tritones)
+ *  restart a semitone away, in the direction of the movement, once each cycle closes. */
+export function cycleRoots(step, root) {
+  const len = 12 / gcd(step, 12), shift = step <= 6 ? 1 : 11, out = [];
+  let start = root;
+  while (out.length < 12) {
+    for (let i = 0; i < len && out.length < 12; i++) out.push((start + i * step) % 12);
+    start = (start + shift) % 12;
+  }
+  return out;
+}
 
 export function generateCycle(quals, step, root, bars, meter = { num: 4, den: 4 }) {
   const events = [];
-  for (const q of quals) {
-    let r = root;
-    for (let i = 0; i < 12; i++) {
-      if (step % 2 === 0 && i === 6) r = (root + 11) % 12; // whole tones: second whole-tone scale
-      events.push({ label: FLATS[r] + q, bars });
-      r = (r + step) % 12;
-    }
-  }
+  const roots = cycleRoots(step, root);
+  for (const q of quals) for (const r of roots) events.push({ label: FLATS[r] + q, bars });
   const names = quals.map(q => (QUALS.find(x => x[0] === q) || [q, q])[1]).join(' · ');
-  return { title: `${names} ${CYCLES[step] || ''}`.trim(), style: 'swing', bpm: 100, meter, events, unknown: [], src: 'gen' };
+  const mv = (CYCLES.find(c => c[0] === step) || [0, ''])[1].toLowerCase();
+  return { title: `${names} ${mv}`.trim(), style: 'swing', bpm: 100, meter, events, unknown: [], src: 'gen' };
 }
