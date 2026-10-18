@@ -326,9 +326,16 @@ export class Groove {
         else if (major && this.rng() < 0.5) D('kick', tt, e === 0 ? 0.3 : 0.18);
         if (j === 1 && this.rng() < 0.14 * busy) D('snare', tt, 0.2);
       } else if (jazz) {
-        // odd groupings or x/8: the ride keeps a steady pulse on the groups (2 or 3 eighths), accents on the felt groups
-        if (start) D('ride', tt, major ? 0.72 : 0.55);
-        else if (this.rng() < 0.12 * busy) D('ride', tt, 0.32);
+        // odd groupings or x/8: the ride keeps flowing in eighths whatever the grouping; the groups only shape its
+        // dynamics. Very fast tempos drop to quarter-note pulses (every 2 eighths, or the group starts in x/8).
+        const fast = eighth < 0.15;
+        const plays = !fast || (pb === 2 ? j === 0 : start);
+        if (plays) {
+          const base = major ? 0.74 : start ? 0.6 : 0.42;
+          // a slight long-short lilt inside each group keeps it from sounding mechanical
+          const pos = e - (g.starts.filter(x => x <= e).pop() ?? 0);
+          D('ride', tt, base * (pos === 1 ? 0.92 : 1) * this.r(0.94, 1.06));
+        }
         if (major && e !== 0) D('hhpedal', tt, 0.65);
         if (e === 0) D('kick', tt, 0.4);
         else if (major && this.rng() < 0.3) D('kick', tt, 0.22);

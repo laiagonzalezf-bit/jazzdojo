@@ -56,7 +56,9 @@ Funciona a l'iPhone, a l'iPad i al Mac des del navegador, i es pot instal·lar c
 - **Baix:** les aproximacions cromàtiques (un semitò abans de l'acord següent) duren com a molt una corxera. Les notes
   de pas que duren un temps sencer són notes de l'acord o la quinta del següent.
 - **Agrupaments i accents:** en els compassos de x/4 escrits en corxeres, els grups de 2 consecutius es noten com a
-  grups de 4. Un 7/4 en 2+2+2+2+3+3 sona com 4+4+3+3, i el ride segueix els grups (de 2 en 2, i de 3 en 3 on toca).
+  grups de 4. Un 7/4 en 2+2+2+2+3+3 sona com 4+4+3+3.
+- **Ride:** en els compassos d'amalgama i de x/8, el ride sempre va a corxeres, sigui quin sigui l'agrupament. Els
+  grups només en marquen la dinàmica. A tempos molt ràpids passa a negres.
 - **Anticipacions:** de tant en tant, l'harmonia toca l'acord següent una corxera abans del temps fort, com és habitual
   en jazz i bossa.
 - **Exercicis:**

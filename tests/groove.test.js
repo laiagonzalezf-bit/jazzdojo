@@ -162,6 +162,25 @@ test('7/4 as 2+2+2+2+3+3 is felt 4+4+3+3: accents on eighths 0, 4, 8, 11 only; r
     const snares = n.filter(x => x.kind === 'drum' && x.name === 'snare' && x.v > 0.6).map(e8);
     for (const e of snares) assert.ok([4, 11].includes(e), `${style}: backbeat on eighth ${e}`);
   }
-  const ride = render('swing', 'piano', m, 1, 4).filter(x => x.kind === 'drum' && x.name === 'ride' && x.v > 0.45).map(e8);
-  for (const e of ride) assert.ok([0, 2, 4, 6, 8, 11].includes(e), `ride on eighth ${e}`);
+  // the ride flows in eighths: every eighth of the bar gets a ride hit; the loud ones are the group starts
+  const rides = render('swing', 'piano', m, 1, 4).filter(x => x.kind === 'drum' && x.name === 'ride');
+  const bars = new Map();
+  for (const r of rides) { const k = r.b.barNo; if (!bars.has(k)) bars.set(k, new Set()); bars.get(k).add(e8(r)); }
+  for (const set of bars.values()) assert.equal(set.size, 14);
+  // dynamics: the felt group starts (4+4+3+3) are louder on average than the rest
+  const avg = f => { const v = rides.filter(f).map(x => x.v); return v.reduce((a, c) => a + c, 0) / v.length; };
+  const felt = r => [0, 4, 8, 11].includes(e8(r));
+  assert.ok(avg(felt) > avg(r => !felt(r) && ![2, 6].includes(e8(r))) + 0.2);
+  assert.ok(avg(felt) > avg(r => [2, 6].includes(e8(r))) + 0.08);
+});
+test('very fast odd meters: the ride drops to quarter-note pulses', async () => {
+  const { Groove } = await import('../src/groove.js');
+  const { Sequencer, layout } = await import('../src/sequencer.js');
+  const m = { num: 7, den: 8, groups: [2, 2, 3] };
+  const g = generateCycle(['7'], 5, 0, 1, m);
+  const song = { meter: m, events: layout(g.events.map(e => ({ ...e, chord: parseChord(e.label) })), m) };
+  const seq = new Sequencer(song, () => ({ loop: 'off', change: 'chord', every: 1, laps: 'new' }));
+  const gr = new Groove(rng(2)); let t = 0; const rides = [];
+  while (!seq.done) { const b = seq.step(t, 0.12); rides.push(...gr.beat(b, { style: 'swing', meter: m, harmony: 'piano', tempo: 500 }).filter(n => n.kind === 'drum' && n.name === 'ride').map(() => b.bib)); t += 0.12; }
+  for (const e of rides) assert.ok([0, 2, 4].includes(e), `ride on ${e}`);
 });
