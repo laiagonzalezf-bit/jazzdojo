@@ -41,6 +41,19 @@ export function validGroups(m, groups) {
 export const groupsOf = m => (validGroups(m, m.groups) ? m.groups : defaultGroups(m));
 export const groupLabel = g => g.join('+');
 
+/**
+ * Groups that are actually felt as accents. In x/4 meters written in eighths, consecutive 2-eighth groups are just
+ * quarter beats, so they pair up: 7/4 as 2+2+2+2+3+3 is felt 4+4+3+3, 5/4 as 3+3+2+2 is felt 3+3+4.
+ */
+export function feltGroups(m, groups) {
+  if (m.den === 8 || !groups.some(x => x % 2 === 1)) return groups.slice();
+  const out = [];
+  for (let i = 0; i < groups.length; i++) {
+    if (groups[i] === 2 && groups[i + 1] === 2) { out.push(4); i++; } else out.push(groups[i]);
+  }
+  return out;
+}
+
 /** The rhythmic grid of a bar: group starts and the group each eighth belongs to. */
 export function meterGrid(m) {
   const groups = groupsOf(m);
@@ -49,8 +62,14 @@ export function meterGrid(m) {
   const groupOf = [];
   let e = 0;
   groups.forEach((len, gi) => { starts.push(e); for (let k = 0; k < len; k++) groupOf[e + k] = gi; e += len; });
+  // accent level (felt) groups
+  const majors = feltGroups(m, groups);
+  const majorStarts = [], majorOf = [];
+  e = 0;
+  majors.forEach((len, gi) => { majorStarts.push(e); for (let k = 0; k < len; k++) majorOf[e + k] = gi; e += len; });
   return {
     E, perBeat: perBeat(m), groups, starts, startSet: new Set(starts), groupOf,
+    majors, majorStarts, majorSet: new Set(majorStarts), majorOf,
     oddGroups: groups.some(x => x % 2 === 1),
     // plain 4/4 in quarters uses the hand-tuned 4/4 grooves
     standard: m.num === 4 && m.den === 4 && groups.length === 4 && groups.every(x => x === 2),

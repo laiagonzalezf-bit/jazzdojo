@@ -21,7 +21,7 @@ const DEF = {
   degrees: [1, 3, 5, 7, 9], len: 5, onlyWritten: false, source: 'random', order: 'shuffle',
   sets: [{ id: 'set1', name: 'Bàsics', text: '13579, 53971, 97531, 35791, 1357, 7531' }], setId: 'set1',
   change: 'chord', every: { beats: 2, bars: 2, seconds: 4 }, syncChord: true, laps: 'new', sharp11: true,
-  lead: 'slot', leadBeats: 2, countIn: true, harmony: 'piano', theme: 'dark', vol: { bass: 0.8, drums: 0.7, comp: 0.6, master: 0.85 },
+  lead: 'slot', leadBeats: 2, countIn: true, complexity: 0.5, harmony: 'piano', theme: 'dark', vol: { bass: 0.8, drums: 0.7, comp: 0.6, master: 0.85 },
   songId: null, songPrefs: {}, hideNames: false,
 };
 const S = Object.assign({}, DEF, store.get('jd.settings', {}));
@@ -186,7 +186,7 @@ function onBeat(b) {
   const chordOnly = b.chordStart && !b.changes.some(c => Math.abs(c.t - b.t) < 1e-6);
   const info = { evIdx: b.evIdx, bar: b.barNo, lap: b.lap, inSlot: b.inSlot, slotLen: b.slotLen, up: b.upcoming, chordOnly };
   P.vis.push({ t: b.t, f: () => onBeatVisual(info) });
-  for (const n of groove.beat(b, { style: style(), meter: song.meter, harmony: S.harmony, tempo: tempo() })) audio.play(n);
+  for (const n of groove.beat(b, { style: style(), meter: song.meter, harmony: S.harmony, tempo: tempo(), complexity: S.complexity })) audio.play(n);
 }
 
 /* ---------------- visuals ---------------- */
@@ -374,6 +374,8 @@ function renderArpPane() {
 function renderSoPane() {
   setSeg('styleSeg', style()); setSeg('harmSeg', S.harmony);
   $('countIn').checked = S.countIn;
+  $('cxRange').value = Math.round(S.complexity * 100);
+  $('cxOut').textContent = cxLabel(S.complexity);
   const names = { bass: 'Baix', drums: 'Bateria', comp: 'Harmonia', master: 'General' };
   $('mixer').innerHTML = Object.keys(names).map(k => `<div class="mix"><label for="v-${k}">${names[k]}</label><input type="range" id="v-${k}" data-k="${k}" min="0" max="100" value="${Math.round(S.vol[k] * 100)}"><output id="o-${k}">${Math.round(S.vol[k] * 100)}</output></div>`).join('');
   renderSoundStatus();
@@ -464,6 +466,8 @@ $('patterns').oninput = e => { curSet().text = e.target.value; saveS(); clearTim
 $('styleSeg').onclick = e => { const v = segVal(e); if (!v) return; prefs().style = v; saveS(); setSeg('styleSeg', v); };
 $('harmSeg').onclick = e => { const v = segVal(e); if (!v) return; S.harmony = v; saveS(); setSeg('harmSeg', v); if (audio.ctx) audio.load(v); renderSoundStatus(); };
 $('countIn').onchange = e => { S.countIn = e.target.checked; saveS(); };
+function cxLabel(c) { return c < 0.2 ? 'Molt simple' : c < 0.4 ? 'Simple' : c <= 0.6 ? 'Normal' : c <= 0.8 ? 'Ric' : 'Molt ric'; }
+$('cxRange').oninput = e => { S.complexity = e.target.value / 100; $('cxOut').textContent = cxLabel(S.complexity); saveS(); };
 $('mixer').oninput = e => { const k = e.target.dataset.k; if (!k) return; S.vol[k] = e.target.value / 100; $('o-' + k).textContent = e.target.value; audio.setVolumes(S.vol); saveS(); };
 audio.setVolumes(S.vol);
 // structure

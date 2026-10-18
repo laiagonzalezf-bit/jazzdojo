@@ -50,6 +50,13 @@ Funciona a l'iPhone, a l'iPad i al Mac des del navegador, i es pot instal·lar c
     diferent.
   - En 3/4 l'acompanyament fa vals de jazz: charles al 2 i al 3, baix «1 · 3» o walking, i de vegades una hemiòlia de
     6/8 (accents a l'1 i a la segona corxera del 2).
+- **Complexitat de l'acompanyament** (pestanya So): un fader de simple a ric. Amb el fader avall, la bateria fa menys
+  notes fantasma i redobles, el piano toca menys cops i el baix de swing va a 2 (blanques). Amb el fader amunt hi ha més
+  subdivisió, més comping, més corxeres swingades al baix i més anticipacions. El ride sempre manté un pols estable.
+- **Baix:** les aproximacions cromàtiques (un semitò abans de l'acord següent) duren com a molt una corxera. Les notes
+  de pas que duren un temps sencer són notes de l'acord o la quinta del següent.
+- **Agrupaments i accents:** en els compassos de x/4 escrits en corxeres, els grups de 2 consecutius es noten com a
+  grups de 4. Un 7/4 en 2+2+2+2+3+3 sona com 4+4+3+3, i el ride segueix els grups (de 2 en 2, i de 3 en 3 on toca).
 - **Anticipacions:** de tant en tant, l'harmonia toca l'acord següent una corxera abans del temps fort, com és habitual
   en jazz i bossa.
 - **Exercicis:**

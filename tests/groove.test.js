@@ -7,13 +7,13 @@ import { generateCycle } from '../src/ireal.js';
 
 function rng(seed = 1) { return () => ((seed = (seed * 16807) % 2147483647) - 1) / 2147483646; }
 
-function render(style, harmony, meter = { num: 4, den: 4 }, bars = 1, seed = 11) {
+function render(style, harmony, meter = { num: 4, den: 4 }, bars = 1, seed = 11, complexity = 0.5) {
   const g = generateCycle(['^9', '7', '-9', 'h7', 'o7', '7alt'], 5, 0, bars, meter);
   const song = { meter, events: layout(g.events.map(e => ({ ...e, chord: parseChord(e.label) })), meter) };
   const seq = new Sequencer(song, () => ({ loop: 'off', change: 'chord', every: 1, laps: 'new' }));
   const gr = new Groove(rng(seed));
   const notes = []; let t = 0;
-  while (!seq.done) { const b = seq.step(t, 0.5); notes.push(...gr.beat(b, { style, meter, harmony, tempo: 120 }).map(n => ({ ...n, b }))); t += 0.5; }
+  while (!seq.done) { const b = seq.step(t, 0.5); notes.push(...gr.beat(b, { style, meter, harmony, tempo: 120, complexity }).map(n => ({ ...n, b }))); t += 0.5; }
   return notes;
 }
 
@@ -43,7 +43,7 @@ test('walking bass approaches the next root by step or fifth', () => {
   for (let i = 1; i < notes.length; i++) {
     if (!notes[i].b.chordStart) continue;
     const d = Math.abs(notes[i].midi - notes[i - 1].midi);
-    assert.ok([1, 5, 7].includes(d) || d === 0, `leap of ${d}`);
+    assert.ok([0, 1, 2, 3, 5, 7].includes(d), `leap of ${d}`);
   }
 });
 test('odd and compound meters produce notes', () => {
@@ -115,4 +115,53 @@ test('harmony sometimes anticipates the next chord by an eighth, and then skips 
       assert.equal(downbeat.length, 0, 'anticipated chord hit again on the downbeat');
     }
   }
+});
+
+const ALLM = [{ num: 4, den: 4 }, ...MET];
+test('chromatic bass notes are never longer than an eighth (all styles, meters and complexities)', () => {
+  let chromatic = 0;
+  for (const m of ALLM) for (const style of ['swing', 'bossa', 'even', 'ballad']) for (const cx of [0, 0.5, 1]) for (const seed of [3, 9]) {
+    const notes = render(style, 'piano', m, 1, seed, cx).filter(n => n.kind === 'bass');
+    const spb = 0.5, eighth = (m.den === 8 ? spb : spb / 2);
+    for (const n of notes) {
+      // a chromatic approach: a semitone from the next chord's bass note and not a tone of the current chord
+      const pcsOf = c => c ? Object.values(c.iv).map(i => (c.root + i) % 12) : [];
+      const nx = n.b.nextEv && n.b.nextEv.chord;
+      if (!nx || n.b.nextEv.label === n.b.ev.label) continue;
+      const tgt = nx.bass ?? nx.root, d = ((n.midi - tgt) % 12 + 12) % 12;
+      const isChrom = (d === 1 || d === 11) && !pcsOf(n.b.ev.chord).includes(n.midi % 12);
+      if (isChrom) { chromatic++; assert.ok(n.dur <= eighth * 1.02, `${style} ${m.num}/${m.den} cx${cx}: chromatic ${n.midi} lasts ${n.dur.toFixed(3)}s`); }
+    }
+  }
+  assert.ok(chromatic > 0, 'no chromatic passing notes at all');
+});
+test('swing bass sometimes plays a swung pair of eighths', () => {
+  const notes = render('swing', 'piano', { num: 4, den: 4 }, 1, 5, 0.8).filter(n => n.kind === 'bass');
+  const offbeats = notes.filter(n => Math.abs(((n.t - n.b.t) / 0.5) - 0.62) < 0.08);
+  assert.ok(offbeats.length >= 3, `only ${offbeats.length} swung eighths`);
+});
+test('the complexity fader: busier = more drum and harmony events, simple = two-feel bass', () => {
+  for (const m of [{ num: 4, den: 4 }, { num: 7, den: 4, groups: [2, 2, 2, 2, 3, 3] }]) {
+    const count = cx => { let d = 0, c = 0; for (const seed of [1, 2, 3, 4]) { const n = render('swing', 'piano', m, 1, seed, cx); d += n.filter(x => x.kind === 'drum').length; c += n.filter(x => x.kind === 'chord').length; } return [d, c]; };
+    const [d0, c0] = count(0), [d1, c1] = count(1);
+    assert.ok(d1 > d0, `drums ${d0} → ${d1}`);
+    assert.ok(c1 > c0, `harmony ${c0} → ${c1}`);
+  }
+  const simple = render('swing', 'piano', { num: 4, den: 4 }, 1, 1, 0).filter(n => n.kind === 'bass');
+  assert.ok(simple.every(n => n.b.bi % 2 === 0), 'two-feel bass plays on beats 1 and 3');
+});
+test('7/4 as 2+2+2+2+3+3 is felt 4+4+3+3: accents on eighths 0, 4, 8, 11 only; ride keeps a steady pulse', () => {
+  const m = { num: 7, den: 4, groups: [2, 2, 2, 2, 3, 3] };
+  const e8 = n => n.b.bib * 2 + (n.t - n.b.t > 0.05 ? 1 : 0);
+  for (const style of ['swing', 'even']) {
+    const n = render(style, 'piano', m, 1, 4);
+    const hh = n.filter(x => x.kind === 'drum' && x.name === 'hhpedal').map(e8);
+    for (const e of hh) assert.ok([4, 8, 11].includes(e), `${style}: hi-hat on eighth ${e}`);
+    const kicks = n.filter(x => x.kind === 'drum' && x.name === 'kick' && x.v > 0.5).map(e8);
+    for (const e of kicks) assert.ok([0, 8].includes(e), `${style}: strong kick on eighth ${e}`);
+    const snares = n.filter(x => x.kind === 'drum' && x.name === 'snare' && x.v > 0.6).map(e8);
+    for (const e of snares) assert.ok([4, 11].includes(e), `${style}: backbeat on eighth ${e}`);
+  }
+  const ride = render('swing', 'piano', m, 1, 4).filter(x => x.kind === 'drum' && x.name === 'ride' && x.v > 0.45).map(e8);
+  for (const e of ride) assert.ok([0, 2, 4, 6, 8, 11].includes(e), `ride on eighth ${e}`);
 });
