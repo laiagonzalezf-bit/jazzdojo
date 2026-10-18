@@ -158,9 +158,10 @@ export class AudioEngine {
     const s = set[Math.min(idx, layers - 1)];
     this.sample(s, t, 1, 0.35 + 0.75 * v, this.bus.drums, { pan: PAN[name] || 0 });
   }
-  click(t, accent) {
+  /** Count-in click. level 2 = bar start, 1 = start of a group (odd meters), 0 = other beats. */
+  click(t, level) {
     const o = this.ctx.createOscillator(), g = this.ctx.createGain();
-    o.frequency.value = accent ? 1760 : 1320;
+    o.frequency.value = level === 2 || level === true ? 1760 : level === 1 ? 1480 : 1180;
     g.gain.setValueAtTime(0.0001, t); g.gain.linearRampToValueAtTime(0.3, t + 0.001); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.05);
     o.connect(g); g.connect(this.sess || this.master); o.start(t); o.stop(t + 0.08);
   }

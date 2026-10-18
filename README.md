@@ -41,12 +41,24 @@ Funciona a l'iPhone, a l'iPad i al Mac des del navegador, i es pot instal·lar c
   - Estil: swing, bossa, pop/8es o balada.
   - Harmonia: piano, Rhodes o guitarra.
   - Mesclador de baix, bateria, harmonia i volum general.
-- **Compàs:** es tria a la barra inferior, al costat del tempo (2/4 … 7/4, 6/8, 9/8, 12/8). Cada acord manté els
-  compassos que durava.
+- **Tempo:** + i − van d'1 en 1. Mantén premut el número dels bpm i arrossega amunt o avall per canviar-lo de 5 en 5.
+- **Compàs:** es tria a la barra inferior, al costat del tempo (2/4 … 7/4, 5/8, 6/8, 7/8, 9/8, 12/8). Cada acord manté
+  els compassos que durava.
+  - Els compassos d'amalgama tenen agrupaments: 5/4 en 3+2, 2+3 o en corxeres (3+3+2+2, 2+2+3+3…), 7/4 en 4+3, 3+4,
+    2+2+3…, 5/8 en 3+2 o 2+3, 7/8 en 2+2+3, 3+2+2 o 2+3+2, etc.
+  - La bateria, el baix i l'harmonia accentuen els inicis de grup. El compte d'entrada també els marca amb un clic
+    diferent.
+  - En 3/4 l'acompanyament fa vals de jazz: charles al 2 i al 3, baix «1 · 3» o walking, i de vegades una hemiòlia de
+    6/8 (accents a l'1 i a la segona corxera del 2).
+- **Anticipacions:** de tant en tant, l'harmonia toca l'acord següent una corxera abans del temps fort, com és habitual
+  en jazz i bossa.
 - **Exercicis:**
   - Pots importar d'iReal Pro, escriure acords a mà o generar cicles amb els tipus d'acord en l'ordre que vulguis.
   - Els cicles poden anar per qualsevol interval: quartes, quintes, cromàtic, tons, terceres menors o majors (pujant
     o baixant) i trítons. Si un interval no passa per les dotze notes, el cicle continua des d'un semitò més enllà.
+  - També hi ha l'opció «Aleatori»: les dotze fonamentals en un ordre a l'atzar, sense repetir-ne cap, i un ordre
+    diferent per a cada tipus d'acord.
+  - Els filtres de la llista d'exercicis estan plegats sota la icona de l'embut.
   - Cada exercici té nom, tonalitat, objectius i una dificultat per colors de cinturó. Es poden editar, duplicar,
     esborrar, cercar i filtrar.
 

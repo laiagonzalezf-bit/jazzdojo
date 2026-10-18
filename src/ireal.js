@@ -190,11 +190,17 @@ export const CYCLES = [
   [5, 'Per quartes'], [7, 'Per quintes'], [1, 'Cromàtic ascendent'], [11, 'Cromàtic descendent'],
   [2, 'Per tons ascendents'], [10, 'Per tons descendents'], [3, 'Per terceres menors ascendents'], [9, 'Per terceres menors descendents'],
   [4, 'Per terceres majors ascendents'], [8, 'Per terceres majors descendents'], [6, 'Per trítons'],
+  [0, 'Aleatori (les 12, sense repetir)'],
 ];
 const gcd = (a, b) => (b ? gcd(b, a % b) : a);
 /** The twelve roots for a movement. Steps that don't reach all twelve notes (tones, thirds, tritones)
  *  restart a semitone away, in the direction of the movement, once each cycle closes. */
-export function cycleRoots(step, root) {
+export function cycleRoots(step, root, rng = Math.random) {
+  if (step === 0) { // random order: the chosen root first, then the other eleven shuffled
+    const rest = Array.from({ length: 11 }, (_, i) => (root + 1 + i) % 12);
+    for (let i = rest.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); [rest[i], rest[j]] = [rest[j], rest[i]]; }
+    return [root, ...rest];
+  }
   const len = 12 / gcd(step, 12), shift = step <= 6 ? 1 : 11, out = [];
   let start = root;
   while (out.length < 12) {
@@ -204,11 +210,10 @@ export function cycleRoots(step, root) {
   return out;
 }
 
-export function generateCycle(quals, step, root, bars, meter = { num: 4, den: 4 }) {
+export function generateCycle(quals, step, root, bars, meter = { num: 4, den: 4 }, rng = Math.random) {
   const events = [];
-  const roots = cycleRoots(step, root);
-  for (const q of quals) for (const r of roots) events.push({ label: FLATS[r] + q, bars });
+  for (const q of quals) for (const r of cycleRoots(step, root, rng)) events.push({ label: FLATS[r] + q, bars }); // random: a new order per chord type
   const names = quals.map(q => (QUALS.find(x => x[0] === q) || [q, q])[1]).join(' · ');
-  const mv = (CYCLES.find(c => c[0] === step) || [0, ''])[1].toLowerCase();
+  const mv = step === 0 ? 'en ordre aleatori' : (CYCLES.find(c => c[0] === step) || [0, ''])[1].toLowerCase();
   return { title: `${names} ${mv}`.trim(), style: 'swing', bpm: 100, meter, events, unknown: [], src: 'gen' };
 }

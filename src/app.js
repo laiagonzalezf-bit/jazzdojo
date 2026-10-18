@@ -4,6 +4,7 @@ import { parseIReal, parseTextChords, eventsToText, generateCycle, cycleRoots, Q
 import { ArpEngine } from './arps.js';
 import { Sequencer, layout } from './sequencer.js';
 import { Groove } from './groove.js';
+import { METERS, GROUPINGS, groupsOf, meterGrid, groupLabel } from './meter.js';
 import { AudioEngine } from './audio.js';
 
 const $ = id => document.getElementById(id);
@@ -56,6 +57,7 @@ const prefs = () => (S.songPrefs[song.id] ||= {});
 const tempo = () => prefs().tempo || song.bpm || 120;
 const style = () => prefs().style || song.style || 'swing';
 const meterStr = m => `${m.num}/${m.den}`;
+const meterLabel = m => { const opts = GROUPINGS[meterStr(m)]; const g = groupsOf(m); return opts && opts.length > 1 ? `${meterStr(m)} (${(opts.find(o => o[1].join() === g.join()) || [groupLabel(g)])[0]})` : meterStr(m); };
 const parseMeter = s => { const [n, d] = String(s).split('/').map(Number); return { num: n || 4, den: d || 4 }; };
 const arpOpts = () => ({ sharp11: S.sharp11 });
 
@@ -113,7 +115,8 @@ async function play() {
   let t = audio.now + 0.12;
   if (S.countIn) {
     for (let i = 0; i < m.num; i++) {
-      audio.click(t + i * spb, i === 0);
+      const gr = meterGrid(m), e = i * gr.perBeat;
+      audio.click(t + i * spb, i === 0 ? 2 : gr.startSet.has(e) ? 1 : 0);
       const n = m.num - i;
       P.vis.push({ t: t + i * spb, f: () => { $('countLbl').textContent = String(n); } });
     }
@@ -324,8 +327,12 @@ function renderLoop() {
 }
 function renderHead() {
   $('songTitle').textContent = song.title;
-  $('songMeta').textContent = `${song.events.length} acords · ${meterStr(song.meter)}`;
+  $('songMeta').textContent = `${song.events.length} acords · ${meterLabel(song.meter)}`;
   $('meterSel').value = meterStr(song.meter);
+  const opts = GROUPINGS[meterStr(song.meter)] || [];
+  $('groupSel').hidden = opts.length < 2;
+  $('groupSel').innerHTML = opts.map(([label, g]) => `<option value="${g.join(',')}">${label}</option>`).join('');
+  $('groupSel').value = groupsOf(song.meter).join(',');
 }
 function renderTempo() { $('tempoOut').textContent = tempo(); $('tempoRange').value = tempo(); }
 const PLAY_SVG = '<svg viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></svg>';
@@ -395,8 +402,16 @@ $('loopBtn').onclick = () => {
   if (!P.playing) restAll(); else renderHelp();
 };
 const setTempo = v => { prefs().tempo = Math.max(30, Math.min(320, Math.round(v))); saveS(); renderTempo(); };
-$('tMinus').onclick = () => setTempo(tempo() - 2);
-$('tPlus').onclick = () => setTempo(tempo() + 2);
+$('tMinus').onclick = () => setTempo(tempo() - 1);
+$('tPlus').onclick = () => setTempo(tempo() + 1);
+// press on the bpm number and drag: up = faster, down = slower, in steps of 5
+(() => {
+  const el = $('tempoOut'); let d = null;
+  el.addEventListener('pointerdown', e => { d = { y: e.clientY, v: tempo(), id: e.pointerId }; el.setPointerCapture(e.pointerId); el.classList.add('dragging'); e.preventDefault(); });
+  el.addEventListener('pointermove', e => { if (!d || e.pointerId !== d.id) return; const steps = Math.trunc((d.y - e.clientY) / 14); setTempo(d.v + steps * 5); });
+  const end = () => { d = null; el.classList.remove('dragging'); };
+  el.addEventListener('pointerup', end); el.addEventListener('pointercancel', end);
+})();
 $('tempoRange').oninput = e => setTempo(+e.target.value);
 function toggleHelp() { UI.help = !UI.help; $('helpBtn').setAttribute('aria-pressed', String(UI.help)); $('help').hidden = !UI.help; renderHelp(); }
 $('helpBtn').onclick = toggleHelp;
@@ -453,6 +468,7 @@ $('mixer').oninput = e => { const k = e.target.dataset.k; if (!k) return; S.vol[
 audio.setVolumes(S.vol);
 // structure
 $('meterSel').onchange = e => { stop(); song.meter = parseMeter(e.target.value); saveLib(); buildSeq(); restAll(); renderAll(); };
+$('groupSel').onchange = e => { song.meter = { ...song.meter, groups: e.target.value.split(',').map(Number) }; saveLib(); if (seq) seq.song.meter = song.meter; renderHead(); };
 $('hideNames').onchange = e => { S.hideNames = e.target.checked; saveS(); renderGrid(); };
 
 /* Chord grid gestures:
@@ -538,8 +554,8 @@ document.addEventListener('keydown', e => {
   else if (e.key === 'Escape') stop();
   else if (e.key === 'a' || e.key === 'A') toggleHelp();
   else if (e.key === 'r' || e.key === 'R') restart();
-  else if (e.key === 'ArrowUp') { e.preventDefault(); setTempo(tempo() + 2); }
-  else if (e.key === 'ArrowDown') { e.preventDefault(); setTempo(tempo() - 2); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); setTempo(tempo() + 1); }
+  else if (e.key === 'ArrowDown') { e.preventDefault(); setTempo(tempo() - 1); }
 });
 
 /* ---------------- library ---------------- */
@@ -549,6 +565,8 @@ function renderLib() {
   const fams = ['major', 'dominant', 'menor', 'm7♭5', 'disminuït', 'sus'];
   $('libFilters').innerHTML = fams.map(f => `<button class="chip" data-fam="${f}" aria-pressed="${libF.fam === f}">${f}</button>`).join('')
     + BELTS.map(([id, col, name]) => `<button class="chip" data-level="${id}" aria-pressed="${libF.level === id}" title="Cinturó ${name}"><span class="belt" style="background:${col}"></span></button>`).join('');
+  const active = (libF.fam ? 1 : 0) + (libF.level ? 1 : 0);
+  $('filterCount').textContent = active ? String(active) : '';
   const q = libF.q.toLowerCase();
   const items = library.filter(s => (!q || [s.title, s.key, ...(s.goals || [])].join(' ').toLowerCase().includes(q))
     && (!libF.fam || songFamilies(s).includes(libF.fam)) && (!libF.level || s.level === libF.level));
@@ -564,6 +582,7 @@ $('songBtn').onclick = openLib;
 $('libClose').onclick = () => { $('libSheet').hidden = true; };
 $('libSheet').onclick = e => { if (e.target === $('libSheet')) $('libSheet').hidden = true; };
 $('libSearch').oninput = e => { libF.q = e.target.value; renderLib(); };
+$('filterBtn').onclick = () => { const f = $('libFilters'); f.hidden = !f.hidden; $('filterBtn').setAttribute('aria-expanded', String(!f.hidden)); };
 $('libFilters').onclick = e => {
   const b = e.target.closest('button'); if (!b) return;
   if (b.dataset.fam) libF.fam = libF.fam === b.dataset.fam ? null : b.dataset.fam;
@@ -612,6 +631,8 @@ $('fileIn').onchange = e => { const f = e.target.files[0]; if (!f) return; const
 const gen = { quals: ['^9', '9', '-9'] };
 $('genRoot').innerHTML = FLATS.map((n, i) => `<option value="${i}">${n.replace('b', '♭')}</option>`).join('');
 $('genCycle').innerHTML = CYCLES.map(([st, name]) => `<option value="${st}">${name}</option>`).join('');
+for (const id of ['meterSel', 'genMeter', 'edMeter']) $(id).innerHTML = METERS.map(m => `<option value="${m}">${m}</option>`).join('');
+$('genMeter').value = '4/4';
 function renderGen() {
   $('genQual').innerHTML = QUALS.map(([q, n]) => { const ix = gen.quals.indexOf(q); return `<button class="chip" data-q="${q}" aria-pressed="${ix >= 0}">${n}${ix >= 0 ? `<span class="o">${ix + 1}</span>` : ''}</button>`; }).join('');
   const step = +$('genCycle').value, r = +$('genRoot').value;
@@ -624,7 +645,7 @@ $('genRoot').onchange = renderGen;
 $('genBtn').onclick = () => {
   if (!gen.quals.length) return;
   const s = generateCycle(gen.quals, +$('genCycle').value, +$('genRoot').value, +$('genBars').value, parseMeter($('genMeter').value));
-  s.goals = [(CYCLES.find(c => c[0] === +$('genCycle').value) || [0, ''])[1].toLowerCase()];
+  s.goals = [+$('genCycle').value === 0 ? 'ordre aleatori' : (CYCLES.find(c => c[0] === +$('genCycle').value) || [0, ''])[1].toLowerCase()];
   s.key = 'totes';
   addSongs([s]);
   $('libSheet').hidden = true;
@@ -651,7 +672,8 @@ function renderLevels() {
 }
 $('edLevel').onclick = e => { const b = e.target.closest('[data-l]'); if (!b) return; $('edLevel').dataset.v = b.dataset.l; renderLevels(); };
 function readEditor() {
-  const meter = parseMeter($('edMeter').value);
+  let meter = parseMeter($('edMeter').value);
+  if (editing.meter && meterStr(editing.meter) === meterStr(meter) && editing.meter.groups) meter = { ...meter, groups: editing.meter.groups };
   const r = parseTextChords($('edChords').value, meter);
   const m = $('editMsg');
   if (!r) { m.hidden = false; m.textContent = 'Escriu almenys un acord.'; return null; }

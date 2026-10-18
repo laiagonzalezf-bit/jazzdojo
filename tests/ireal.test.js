@@ -62,7 +62,21 @@ test('every movement covers the twelve roots exactly once', async () => {
     assert.equal(r.length, 12, `step ${step}`);
     assert.equal(new Set(r).size, 12, `step ${step}`);
     assert.equal(r[0], 0);
-    assert.equal(r[1], step % 12, `step ${step}`);
+    if (step) assert.equal(r[1], step % 12, `step ${step}`);
   }
   assert.deepEqual(CYCLES.slice(0, 6).map(c => c[0]), [5, 7, 1, 11, 2, 10]);
+});
+test('random movement: all twelve chords, none repeated, a different order each time', async () => {
+  const { cycleRoots, generateCycle } = await import('../src/ireal.js');
+  const orders = new Set();
+  for (let i = 0; i < 20; i++) {
+    const r = cycleRoots(0, 3);
+    assert.equal(r[0], 3);
+    assert.equal(new Set(r).size, 12);
+    orders.add(r.join());
+  }
+  assert.ok(orders.size > 15);
+  const s = generateCycle(['^7', '7'], 0, 0, 1);
+  assert.equal(s.events.length, 24);
+  assert.equal(new Set(s.events.slice(0, 12).map(e => e.label)).size, 12);
 });

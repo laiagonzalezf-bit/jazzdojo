@@ -1,6 +1,7 @@
 // Accompaniment generator: turns one beat of the sequencer into note events for bass, drums and harmony.
 // Pure apart from the injectable RNG; the audio engine plays what it returns.
 import { degreeInterval } from './theory.js';
+import { meterGrid } from './meter.js';
 
 export const STYLES = ['swing', 'bossa', 'even', 'ballad'];
 export const HARMONY = ['piano', 'rhodes', 'guitar'];
@@ -22,6 +23,10 @@ export class Groove {
     this.line = null;
     this.voice = null;
     this.compPlan = [];
+    this.bassPlan = null;
+    this.bar = null;
+    this.antNext = false;
+    this.antSkip = false;
   }
   r(a = 0, b = 1) { return a + (b - a) * this.rng(); }
   pick(arr) { return arr[Math.floor(this.rng() * arr.length)]; }
@@ -104,28 +109,55 @@ export class Groove {
 
   /**
    * @param info  one beat from Sequencer.step()
-   * @param o     { style, meter:{num,den}, harmony:'piano'|'rhodes'|'guitar', tempo }
-   * @returns note events: {kind:'drum', name, t, v} | {kind:'bass', midi, t, dur, v} | {kind:'chord', inst, midis, t, dur, v, roll}
+   * @param o     { style, meter:{num,den,groups?}, harmony:'piano'|'rhodes'|'guitar', tempo }
+   * @returns note events: {kind:'drum', name, t, v} | {kind:'bass', midi, t, dur, v}
+   *          | {kind:'chord', inst, midis, t, dur, v, roll, ant?}  (ant: anticipates the next chord)
    */
   beat(info, o) {
+    const g = meterGrid(o.meter);
     const out = [];
-    const { t, spb, ev, bi } = info;
-    const ch = ev.chord;
-    const style = o.style, num = o.meter.num, compound = o.meter.den === 8 && num % 3 === 0;
-    const sw = compound ? 0.5 : swingRatio(style, o.tempo);
-    const off = t + sw * spb;
-    const b = info.bib;
-    const lastBeatOfPhrase = b === num - 1 && info.barNo % 4 === 0;
+    const ctx = this.setup(info, o, g, out);
+    if (g.standard) this.beat44(info, o, ctx);
+    else this.beatGrid(info, o, g, ctx);
+    if (info.ev.chord) this.anticipate(info, o, g, ctx);
+    return out;
+  }
+
+  setup(info, o, g, out) {
+    const { t, spb, ev } = info;
+    const style = o.style;
+    const jazz = style === 'swing' || style === 'ballad';
+    // swung eighths only for jazz styles counted in quarters with even groups (jazz waltz included)
+    const straight = !jazz || g.perBeat === 1 || g.oddGroups;
+    const sw = straight ? 0.5 : swingRatio(style, o.tempo);
     const D = (name, tt, v) => out.push({ kind: 'drum', name, t: tt + this.hum(5), v: Math.max(0.05, Math.min(1, v * this.r(0.88, 1.08))) });
     const B = (midi, tt, dur, v) => out.push({ kind: 'bass', midi, t: tt + this.hum(4), dur, v: v * this.r(0.9, 1.05) });
+    const ch = ev.chord;
+    const inst = o.harmony || 'piano';
+    let antSkip = false;
+    if (ch && info.chordStart) {
+      if (this.antNext) { antSkip = true; this.voice = this.antVoice; }
+      else this.voice = inst === 'guitar' ? this.voicing(ch, 52, 70, 3, 59) : this.voicing(ch, 50, 72, 4, 60);
+      this.antNext = false;
+      this.compPlan = [];
+    }
+    this.antSkip = info.chordStart ? antSkip : this.antSkip;
+    const chordEnd = t + (ev.beats - info.bi) * spb; // never ring past the chord
+    const C = (tt, durSec, vel, roll = 0, midis = this.voice) => {
+      tt += this.hum(6);
+      out.push({ kind: 'chord', inst, midis, t: tt, dur: Math.max(0.05, Math.min(durSec, chordEnd - tt + 0.03)), v: vel * this.r(0.9, 1.08), roll });
+    };
+    return { out, t, spb, off: t + sw * spb, sw, style, jazz, straight, D, B, C, ch, inst, chordEnd };
+  }
 
-    /* ---------- drums ---------- */
-    if (compound) {
-      const g = b % 3 === 0;
-      D(style === 'even' ? 'hhclosed' : 'ride', t, g ? 0.75 : 0.45);
-      if (b === 0) D('kick', t, 0.6);
-      if (b === 3 || b === 9) D(style === 'swing' || style === 'ballad' ? 'hhpedal' : 'xstick', t, 0.7);
-    } else if (style === 'swing') {
+  /* ================= 4/4 in quarters: hand-tuned grooves ================= */
+  beat44(info, o, x) {
+    const { t, spb, ev, bi } = info;
+    const { D, B, C, off, style, ch, inst } = x;
+    const num = 4, b = info.bib;
+    const lastBeatOfPhrase = b === num - 1 && info.barNo % 4 === 0;
+
+    if (style === 'swing') {
       const back = b % 2 === 1;
       D('ride', t, (b === 0 ? 0.62 : back ? 0.78 : 0.66));
       if (back) D('ride', off, 0.42);
@@ -153,24 +185,19 @@ export class Groove {
       if (b === num - 2 && this.rng() < 0.45) D('kick', off, 0.6);
       if (lastBeatOfPhrase) { D('snare', off, 0.55); D('snare', t + 0.75 * spb, 0.4); }
     }
+    if (!ch) return;
 
-    if (!ch) return out;
-
-    /* ---------- bass ---------- */
+    // bass
     if (info.chordStart) this.line = this.walk(ch, ev.beats, info.nextEv && info.nextEv.chord);
     const line = this.line || [this.nearest(ch.root, 36)];
     const root = line[0];
     const fifth = this.nearest((ch.root + ch.iv[5]) % 12, root + 5, 28, 47);
-    if (compound) {
-      if (b % 3 === 0) B(b % 6 === 0 ? root : fifth, t, spb * 2.8, 0.9);
-    } else if (style === 'swing') {
-      B(line[Math.min(bi, line.length - 1)], t, spb * 0.88, bi === 0 ? 1 : 0.85);
-    } else if (style === 'ballad') {
+    if (style === 'swing') B(line[Math.min(bi, line.length - 1)], t, spb * 0.88, bi === 0 ? 1 : 0.85);
+    else if (style === 'ballad') {
       if (bi === 0) B(root, t, spb * Math.min(ev.beats, 2) * 0.95, 0.9);
       else if (bi % 2 === 0) B(line[Math.min(bi, line.length - 1)], t, spb * 1.9, 0.75);
     } else if (style === 'bossa') {
-      const ab = b % 2;
-      if (ab === 0) { B(b % 4 === 0 || bi === 0 ? root : fifth, t, spb * 1.4, 0.95); }
+      if (b % 2 === 0) B(b % 4 === 0 || bi === 0 ? root : fifth, t, spb * 1.4, 0.95);
       else B(b % 4 === 1 ? fifth : root, t + spb * 0.5, spb * 0.45, 0.6);
     } else {
       const n = b % 4 === 2 ? fifth : root;
@@ -178,71 +205,173 @@ export class Groove {
       B(n, t + spb * 0.5, spb * 0.4, 0.6);
     }
 
-    /* ---------- harmony ---------- */
-    const inst = o.harmony || 'piano';
-    if (info.chordStart) {
-      this.voice = inst === 'guitar' ? this.voicing(ch, 52, 70, 3, 59) : this.voicing(ch, 50, 72, 4, 60);
-      this.compPlan = [];
-    }
-    const v = this.voice;
-    const chordEnd = t + (ev.beats - bi) * spb; // never ring past the chord
-    const C = (tt, durBeats, vel, roll = 0, midis = v) => {
-      tt += this.hum(6);
-      out.push({ kind: 'chord', inst, midis, t: tt, dur: Math.max(0.05, Math.min(durBeats * spb, chordEnd - tt + 0.03)), v: vel * this.r(0.9, 1.08), roll });
-    };
-    // swing piano/rhodes: a comping figure chosen per bar, relative to the chord
+    // harmony
+    const skip0 = bi === 0 && this.antSkip; // the chord was already anticipated: don't hit it again on the downbeat
     const planBar = () => {
       const left = Math.min(num, ev.beats - bi);
       const opts = left >= 4 ? [[0, 1.5], [1.5], [0, 2.5], [0.5, 2], [1.5, 3], [0], [2.5], [0, 2]]
         : left === 3 ? [[0], [0, 1.5], [1.5], [0.5, 2]]
           : left === 2 ? [[0], [0.5], [0, 1.5]] : [[0]];
       let p = this.pick(opts);
-      if (bi === 0 && !p.some(x => x < 1) && this.rng() < 0.6) p = [0, ...p];
-      this.compPlan = p.map(x => x + bi);
+      if (bi === 0 && !p.some(q => q < 1) && this.rng() < 0.6) p = [0, ...p];
+      if (bi === 0 && this.antSkip) p = p.filter(q => q !== 0);
+      this.compPlan = p.map(q => q + bi);
     };
-    if (compound) {
-      if (b === 0) C(t, Math.min(ev.beats, num) * 0.9, 0.7, inst === 'guitar' ? 0.012 : 0);
-      else if (b % 3 === 0 && this.rng() < 0.4) C(t, 2.5, 0.5);
-    } else if (style === 'swing') {
-      if (inst === 'guitar') {
-        C(t, 0.5, b % 2 === 1 ? 0.6 : 0.5, 0.01);
-      } else {
+    if (style === 'swing') {
+      if (inst === 'guitar') { if (!skip0) C(t, 0.5 * spb, b % 2 === 1 ? 0.6 : 0.5, 0.01); }
+      else {
         if (bi === 0 || b === 0) planBar();
         for (const pos of this.compPlan) {
           if (Math.floor(pos) !== bi) continue;
-          const frac = pos - bi;
-          const tt = frac === 0 ? t : off;
-          const nextHit = this.compPlan.find(x => x > pos);
+          const tt = pos - bi === 0 ? t : off;
+          const nextHit = this.compPlan.find(q => q > pos);
           const dur = nextHit !== undefined && nextHit - pos < 1.2 ? 0.45 : this.pick([0.5, 1, 1.5]);
-          C(tt, inst === 'rhodes' ? dur * 1.4 : dur, (pos === 0 ? 0.8 : 0.68) * (inst === 'rhodes' ? 0.85 : 1));
+          C(tt, (inst === 'rhodes' ? dur * 1.4 : dur) * spb, (pos === 0 ? 0.8 : 0.68) * (inst === 'rhodes' ? 0.85 : 1));
         }
       }
     } else if (style === 'ballad') {
       if (inst === 'guitar') {
-        // gentle arpeggio through the voicing in eighths
-        const notes = v.concat(v.slice(1, -1).reverse());
-        for (let h = 0; h < 2; h++) {
-          const m = notes[(bi * 2 + h) % notes.length];
-          C(h ? off : t, 1.5, 0.5, 0, [m]);
-        }
-      } else if (bi === 0) C(t, Math.min(ev.beats, num) * 0.98, 0.65, 0.03);
-      else if (bi === 2 && ev.beats >= 4 && this.rng() < 0.35) C(off, 1.5, 0.4);
+        const v = this.voice, notes = v.concat(v.slice(1, -1).reverse());
+        for (let h = 0; h < 2; h++) C(h ? off : t, 1.5 * spb, 0.5, 0, [notes[(bi * 2 + h) % notes.length]]);
+      } else if (bi === 0 && !skip0) C(t, Math.min(ev.beats, num) * 0.98 * spb, 0.65, 0.03);
+      else if (bi === 2 && ev.beats >= 4 && this.rng() < 0.35) C(off, 1.5 * spb, 0.4);
     } else if (style === 'bossa') {
       const e = (((info.barNo - 1) % 2) * num + b) * 2 % 16;
       const pat = [0, 3, 6, 10, 13];
       const roll = inst === 'guitar' ? 0.012 : 0;
       let hit = false;
-      if (pat.includes(e)) { C(t, 0.9, 0.62, roll); hit = true; }
-      if (pat.includes(e + 1)) { C(off, 0.9, 0.58, roll); hit = true; }
-      if (bi === 0 && !hit) C(t, 0.9, 0.6, roll);
-    } else {
-      if (inst === 'guitar') C(off, 0.25, 0.55, 0.008);
-      else {
-        if (bi === 0) C(t, Math.min(ev.beats, num) * 0.9, 0.5);
-        if (b % 2 === 1) C(off, 0.3, 0.55);
+      if (pat.includes(e) && !skip0) { C(t, 0.9 * spb, 0.62, roll); hit = true; }
+      if (pat.includes(e + 1)) { C(off, 0.9 * spb, 0.58, roll); hit = true; }
+      if (bi === 0 && !hit && !skip0) C(t, 0.9 * spb, 0.6, roll);
+    } else if (inst === 'guitar') C(off, 0.25 * spb, 0.55, 0.008);
+    else {
+      if (bi === 0 && !skip0) C(t, Math.min(ev.beats, num) * 0.9 * spb, 0.5);
+      if (b % 2 === 1) C(off, 0.3 * spb, 0.55);
+    }
+  }
+
+  /* ================= any other meter / grouping: groove built from the eighth-note grid ================= */
+  beatGrid(info, o, g, x) {
+    const { t, spb, ev, bi } = info;
+    const { D, B, C, off, style, jazz, straight, ch, inst } = x;
+    const pb = g.perBeat;
+    const barStartBeat = info.bib === 0;
+    // eighths that fall inside this beat, with their bar position and time
+    const es = pb === 2 ? [{ j: 0, e: info.bib * 2, tt: t }, { j: 1, e: info.bib * 2 + 1, tt: off }] : [{ j: 0, e: info.bib, tt: t }];
+    const eighth = pb === 2 ? spb / 2 : spb;
+    if (barStartBeat || !this.bar || this.bar.no !== info.barNo) {
+      // per-bar choices: a 6/8 hemiola over 3/4 (accents on 1 and the "and" of 2), fills
+      const waltz = o.meter.num === 3 && o.meter.den === 4 && !g.oddGroups;
+      this.bar = { no: info.barNo, hemiola: waltz && this.rng() < 0.35, fill: info.barNo % 4 === 0 && this.rng() < 0.6 };
+    }
+    const hem = this.bar.hemiola;
+    const lastBeat = info.bib === (g.E / pb) - 1;
+
+    /* drums */
+    for (const { j, e, tt } of es) {
+      const start = g.startSet.has(e), gi = g.groupOf[e];
+      if (jazz && !straight) {
+        if (j === 0) D('ride', tt, (e === 0 ? 0.64 : start ? 0.72 : 0.62) * (style === 'ballad' ? 0.6 : 1));
+        else if (info.bib % 2 === 1 && !hem) D('ride', tt, 0.4 * (style === 'ballad' ? 0.7 : 1));
+        if (start && e !== 0 && !(hem && e === 2)) D('hhpedal', tt, 0.72);
+        if (hem && (e === 0 || e === 3)) { D(e === 0 ? 'kick' : 'snare', tt, e === 0 ? 0.4 : 0.42); if (e === 3) D('ride', tt, 0.55); }
+        else if (start && this.rng() < 0.5) D('kick', tt, e === 0 ? 0.3 : 0.18);
+        if (j === 1 && this.rng() < 0.14) D('snare', tt, 0.2);
+      } else if (jazz) {
+        // jazz with odd groupings or eighth-note meters: ride on every eighth, accents on the groups
+        D('ride', tt, start ? 0.7 : 0.4);
+        if (start && e !== 0) D('hhpedal', tt, 0.65);
+        if (e === 0) D('kick', tt, 0.4);
+        if (start && gi === g.groups.length - 1 && this.rng() < 0.4) D('xstick', tt, 0.35);
+        if (!start && this.rng() < 0.1) D('snare', tt, 0.18);
+      } else {
+        D('hhclosed', tt, start ? 0.58 : 0.34);
+        if (start) {
+          if (gi % 2 === 0) D('kick', tt, e === 0 ? 0.8 : 0.65);
+          else D(style === 'bossa' ? 'xstick' : 'snare', tt, style === 'bossa' ? 0.7 : 0.78);
+        }
+      }
+      if (this.bar.fill && lastBeat && j === pb - 1) { D('snare', tt, 0.5); if (pb === 2) D('snare', tt - eighth / 2, 0.3); }
+    }
+    if (!ch) return;
+
+    /* bass and harmony are planned once per chord, eighth by eighth */
+    const startE = ev.start * pb, lenE = ev.beats * pb;
+    const barE = k => (startE + k) % g.E;
+    if (info.chordStart) {
+      const nextCh = info.nextEv && info.nextEv.chord;
+      // bass hits
+      let hits = [];
+      const waltz = o.meter.num === 3 && o.meter.den === 4 && !g.oddGroups;
+      const walkAll = jazz && style === 'swing' && !straight && this.rng() < (waltz ? 0.35 : 0.5);
+      for (let k = 0; k < lenE; k++) {
+        const be = barE(k);
+        if (k === 0) { hits.push(k); continue; }
+        if (walkAll) { if (k % 2 === 0) hits.push(k); continue; }
+        if (waltz && jazz) { if (be === 4 || (be === 0)) hits.push(k); continue; } // "1 . 3"
+        if (g.startSet.has(be)) { hits.push(k); continue; }
+        if (!jazz && g.startSet.has((be + 1) % g.E) && this.rng() < 0.35) hits.push(k); // pickup into a group
+      }
+      const notes = jazz ? this.walk(ch, hits.length, nextCh)
+        : hits.map((k, i) => {
+          const root = this.nearest(ch.bass ?? ch.root, Math.min(Math.max(this.lastBass, 31), 45), 28, 47);
+          if (i === 0) return root;
+          if (i === hits.length - 1 && nextCh && hits.length > 2) { const tg = this.nearest(nextCh.bass ?? nextCh.root, root, 28, 47); return tg + (this.rng() < 0.5 ? 1 : -1); }
+          return i % 2 ? this.nearest((ch.root + ch.iv[5]) % 12, root + 5, 28, 47) : root;
+        });
+      if (!jazz) this.lastBass = notes[notes.length - 1];
+      this.bassPlan = new Map(hits.map((k, i) => [k, { midi: notes[i], len: (hits[i + 1] ?? lenE) - k }]));
+      // harmony hits
+      const comp = [];
+      for (let k = 0; k < lenE; k++) {
+        const be = barE(k), start = g.startSet.has(be);
+        let p;
+        if (k === 0) p = this.antSkip ? 0 : (style === 'ballad' ? 1 : 0.62);
+        else if (inst === 'guitar' && jazz && !straight) p = k % 2 === 0 ? 1 : 0;  // four (three, five…) to the bar
+        else if (inst === 'guitar' && style === 'even') p = start ? 0.3 : 0.6;
+        else if (style === 'ballad') p = start ? 0.2 : 0;
+        else if (waltz && this.bar.hemiola) p = be === 3 ? 0.7 : 0;
+        else if (start) p = 0.4;
+        else if (g.startSet.has((be + 1) % g.E)) p = 0.22;               // just before a group: syncopation
+        else p = pb === 2 && k % 2 === 1 ? 0.12 : 0.06;
+        if (this.rng() < p) comp.push(k);
+      }
+      if (!comp.length && !this.antSkip) comp.push(0);
+      this.compPlan = comp;
+    }
+    for (const { j, tt } of es) {
+      const k = bi * pb + j;
+      const bh = this.bassPlan && this.bassPlan.get(k);
+      if (bh) B(bh.midi, tt, bh.len * eighth * 0.92, k === 0 ? 1 : 0.85);
+      if (this.compPlan.includes(k)) {
+        const nxt = this.compPlan.find(q => q > k);
+        const lenEighths = nxt !== undefined ? nxt - k : lenE - k;
+        const long = style === 'ballad' || inst === 'rhodes';
+        const dur = (nxt !== undefined && lenEighths <= 2 && !long) ? lenEighths * eighth * 0.8 : Math.min(lenEighths, long ? 6 : 3) * eighth;
+        const roll = style === 'ballad' && k === 0 ? 0.03 : inst === 'guitar' ? 0.01 : 0;
+        C(tt, dur, k === 0 ? 0.75 : 0.62, roll);
       }
     }
-    return out;
+  }
+
+  /* An eighth note before the next chord, the harmony sometimes plays it early (very common in jazz and bossa). */
+  anticipate(info, o, g, x) {
+    const { ev, bi, spb, t } = info;
+    const nextCh = info.nextEv && info.nextEv.chord;
+    if (bi !== ev.beats - 1 || !nextCh || info.nextEv.label === ev.label) return;
+    // only into a chord that lands on a strong point (a beat in 4/4, a group start otherwise)
+    const nextBarE = ((ev.start + ev.beats) * g.perBeat) % g.E;
+    if (!g.standard && !g.startSet.has(nextBarE)) return;
+    const p = { swing: 0.3, bossa: 0.25, even: 0.15, ballad: 0.1 }[x.style] * (x.inst === 'guitar' && x.style === 'swing' ? 0.3 : 1);
+    if (this.rng() >= p) return;
+    const antT = g.perBeat === 2 ? x.off : t;
+    // the anticipation replaces any hit of the old chord at that moment
+    for (let i = x.out.length - 1; i >= 0; i--) if (x.out[i].kind === 'chord' && x.out[i].t >= antT - 0.03) x.out.splice(i, 1);
+    const inst = x.inst;
+    const nv = inst === 'guitar' ? this.voicing(nextCh, 52, 70, 3, 59) : this.voicing(nextCh, 50, 72, 4, 60);
+    x.out.push({ kind: 'chord', inst, midis: nv, t: antT + this.hum(5), dur: spb * (x.style === 'ballad' ? 2 : 1.1), v: 0.72 * this.r(0.9, 1.08), roll: x.style === 'ballad' ? 0.03 : 0, ant: true });
+    this.antNext = true;
+    this.antVoice = nv;
   }
 }
 

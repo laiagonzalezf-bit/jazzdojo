@@ -146,9 +146,10 @@ textarea{resize:vertical;min-height:76px;font-size:15px}
 .loopbtn .st{display:none}
 .tempo{margin-left:auto;display:flex;align-items:center;gap:8px}
 .tempo .stepper button{width:40px;height:46px}
-.tempo output{font-size:20px;min-width:48px}
+.tempo output{font-size:20px;min-width:52px;cursor:ns-resize;touch-action:none;user-select:none;-webkit-user-select:none;border-radius:6px}
+.tempo output.dragging{background:var(--accent);color:var(--accent-ink)}
 .tempo .u{font-size:12px;color:var(--muted)}
-.meter{background:var(--bg);border:1px solid var(--line);border-radius:10px;height:46px;padding:0 8px;font-weight:600;font-size:16px;width:auto}
+.meter{max-width:9.5em;background:var(--bg);border:1px solid var(--line);border-radius:10px;height:46px;padding:0 8px;font-weight:600;font-size:16px;width:auto}
 .tempo input[type=range]{width:170px;accent-color:var(--accent)}
 @media (max-width:640px){ .loopbtn .st{display:inline} .tempo input[type=range],.tempo .u,.loopbtn .lt{display:none} .tbtn{width:44px;height:44px} .play{width:58px;height:58px} }
 @media (max-width:480px){
@@ -156,6 +157,8 @@ textarea{resize:vertical;min-height:76px;font-size:15px}
   .tin{flex-wrap:wrap;row-gap:8px;justify-content:space-between}
   .tempo{margin-left:0;width:100%}
   .tempo input[type=range]{display:block;flex:1;width:auto;min-width:0}
+  .tempo:has(#groupSel:not([hidden])) input[type=range]{display:none}
+  .tempo #groupSel{flex:1;max-width:none}
 }
 
 /* sheets */
@@ -283,9 +286,10 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;color:var(--muted)}
       <svg class="ico" viewBox="0 0 24 24"><path d="M17 2l3 3-3 3"/><path d="M4 11V9a4 4 0 0 1 4-4h12"/><path d="M7 22l-3-3 3-3"/><path d="M20 13v2a4 4 0 0 1-4 4H4"/></svg>
       <span id="loopLbl"></span></button>
     <div class="tempo">
-      <select id="meterSel" class="meter" aria-label="Compàs"><option value="2/4">2/4</option><option value="3/4">3/4</option><option value="4/4">4/4</option><option value="5/4">5/4</option><option value="6/4">6/4</option><option value="7/4">7/4</option><option value="6/8">6/8</option><option value="9/8">9/8</option><option value="12/8">12/8</option></select>
+      <select id="meterSel" class="meter" aria-label="Compàs"></select>
+      <select id="groupSel" class="meter" aria-label="Agrupament" hidden></select>
       <input type="range" id="tempoRange" min="30" max="320" step="1" aria-label="Tempo">
-      <div class="stepper"><button id="tMinus" aria-label="Més lent">−</button><output id="tempoOut">120</output><button id="tPlus" aria-label="Més ràpid">+</button></div>
+      <div class="stepper"><button id="tMinus" aria-label="Més lent">−</button><output id="tempoOut" title="Arrossega amunt o avall per canviar de 5 en 5">120</output><button id="tPlus" aria-label="Més ràpid">+</button></div>
       <span class="u">bpm</span>
     </div>
   </div>
@@ -295,8 +299,9 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;color:var(--muted)}
   <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="libTitle">
     <div class="sheethead"><h2 id="libTitle">Exercicis</h2><button class="secondary" id="libClose">Tanca</button></div>
     <div class="field">
-      <input type="search" id="libSearch" placeholder="Cerca per nom, objectiu o tonalitat" aria-label="Cerca">
-      <div class="chips" id="libFilters"></div>
+      <div class="row"><input type="search" id="libSearch" class="grow" placeholder="Cerca per nom, objectiu o tonalitat" aria-label="Cerca">
+        <button class="pill" id="filterBtn" aria-expanded="false" aria-controls="libFilters" aria-label="Filtres"><svg class="ico" viewBox="0 0 24 24"><path d="M3 5h18l-7 8v6l-4-2v-4z"/></svg><span id="filterCount"></span></button></div>
+      <div class="chips" id="libFilters" hidden></div>
     </div>
     <div class="lib" id="libList"></div>
 
@@ -322,7 +327,7 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;color:var(--muted)}
         <div class="field"><label class="lbl" for="genBars">Compassos per acord</label>
           <select id="genBars"><option value="0.5">½</option><option value="1" selected>1</option><option value="2">2</option><option value="4">4</option></select></div>
         <div class="field"><label class="lbl" for="genMeter">Compàs</label>
-          <select id="genMeter"><option>3/4</option><option selected>4/4</option><option>5/4</option><option>6/8</option></select></div>
+          <select id="genMeter"></select></div>
       </div>
       <div class="hint" id="genPreview"></div>
       <div class="row"><button class="primary" id="genBtn">Crea l'exercici</button></div>
@@ -338,7 +343,7 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;color:var(--muted)}
     <div class="field"><label class="lbl" for="edChords">Acords</label><textarea id="edChords" spellcheck="false" style="min-height:140px"></textarea>
       <div class="hint">Cada | és un compàs. % repeteix l'acord anterior. Dos acords dins un compàs es reparteixen el temps.</div></div>
     <div class="cols">
-      <div class="field"><label class="lbl" for="edMeter">Compàs</label><select id="edMeter"><option>2/4</option><option>3/4</option><option>4/4</option><option>5/4</option><option>6/4</option><option>7/4</option><option>6/8</option><option>9/8</option><option>12/8</option></select></div>
+      <div class="field"><label class="lbl" for="edMeter">Compàs</label><select id="edMeter"></select></div>
       <div class="field"><label class="lbl" for="edKey">Tonalitat</label><input type="text" id="edKey" placeholder="p. ex. C, totes"></div>
       <div class="field"><label class="lbl" for="edStyle">Estil</label><select id="edStyle"><option value="swing">Swing</option><option value="bossa">Bossa</option><option value="even">Pop / 8es</option><option value="ballad">Balada</option></select></div>
     </div>
