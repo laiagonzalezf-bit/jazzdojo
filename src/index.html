@@ -155,10 +155,36 @@ textarea{resize:vertical;min-height:76px;font-size:15px}
 @media (max-width:480px){
   body{padding-bottom:calc(168px + env(safe-area-inset-bottom, 0px))}
   .tin{flex-wrap:wrap;row-gap:8px;justify-content:space-between}
-  .tempo{margin-left:0;width:100%}
+  .tempo{margin-left:0;width:100%;order:-1}
   .tempo input[type=range]{display:block;flex:1;width:auto;min-width:0}
   .tempo:has(#groupSel:not([hidden])) input[type=range]{display:none}
   .tempo #groupSel{flex:1;max-width:none}
+}
+
+/* phone turned sideways: just the arpeggios, the chord help and the transport, zoomed to fit */
+@media (orientation: landscape) and (max-height: 520px){
+  body{padding-block:env(safe-area-inset-top, 0px) calc(78px + env(safe-area-inset-bottom, 0px))}
+  .top,.panel,.stagehead,.progress{display:none!important}
+  .layout{grid-template-columns:1fr;max-width:none;gap:0}
+  .stage{border:0;background:transparent;padding:6px 0 0;gap:6px;min-height:calc(100vh - 84px - env(safe-area-inset-bottom, 0px));justify-content:center}
+  .rows{gap:0}
+  .rows .tiles,.rows.r2 .tiles{font-size:min(30vh, 13vw);line-height:1}
+  .rows.r3 .tiles{font-size:min(21vh, 11vw)}
+  .rows.r4 .tiles{font-size:min(16vh, 10vw)}
+  .helpbtn{padding:5px 12px;font-size:14px}
+  /* the chord help sits to the right of the arpeggios, so both stay visible */
+  .help{position:fixed;right:max(16px, env(safe-area-inset-right, 0px));top:max(10px, env(safe-area-inset-top, 0px));width:min(36vw, 320px);background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:8px;z-index:15;gap:6px}
+  .chords{grid-template-columns:1fr;gap:4px}
+  .chords .c{padding:4px 10px;display:flex;align-items:baseline;gap:10px}
+  .chords .c .n{font-size:22px}
+  .chords .c .eyebrow{min-width:5.5em}
+  .stage:has(.help:not([hidden])) .rows .tiles{font-size:min(26vh, 8vw)}
+  .transport{padding-block:6px calc(6px + env(safe-area-inset-bottom, 0px))}
+  .tin{flex-wrap:nowrap}
+  .tempo{order:0;margin-left:auto;width:auto}
+  .tempo input[type=range]{display:none!important}
+  .tbtn{width:42px;height:42px} .play{width:54px;height:54px}
+  .loopbtn .lt{display:none} .loopbtn .st{display:inline}
 }
 
 /* sheets */
@@ -218,7 +244,7 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;color:var(--muted)}
   <aside class="panel">
     <div class="tabs" role="tablist">
       <button role="tab" id="tab-arp" aria-selected="true" data-pane="pane-arp">Arpegis</button>
-      <button role="tab" id="tab-so" aria-selected="false" data-pane="pane-so">So</button>
+      <button role="tab" id="tab-so" aria-selected="false" data-pane="pane-so">Mix</button>
       <button role="tab" id="tab-str" aria-selected="false" data-pane="pane-str">Estructura</button>
     </div>
 
@@ -273,8 +299,6 @@ ol.steps{margin:0;padding-left:20px;font-size:14px;color:var(--muted)}
     </div>
 
     <div class="pane" id="pane-str" hidden>
-      <div class="hint">Toca un acord per triar-lo i prem ▶, o fes-hi doble toc: sona des d'allà amb compte d'entrada.
-        Mantén premut i arrossega sobre uns quants acords per fer-ne un bucle. Doble toc a qualsevol acord per sortir del bucle.</div>
       <label class="switch"><span>Amaga els noms dels acords</span><input type="checkbox" id="hideNames"></label>
       <div class="grid" id="grid"></div>
     </div>

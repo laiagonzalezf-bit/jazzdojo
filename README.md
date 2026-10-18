@@ -8,6 +8,8 @@ Funciona a l'iPhone, a l'iPad i al Mac des del navegador, i es pot instal·lar c
 
 ## Com s'utilitza
 
+- **Mòbil en horitzontal:** només es veuen les dues files d'arpegis, el botó «Mostra l'acord» (l'ajuda surt al
+  costat) i els controls de reproducció, amb els números tan grans com hi caben.
 - **Pantalla de pràctica:**
   - Hi ha dues files d'arpegis de la mateixa mida. La que estàs tocant té el primer número en vermell; l'altra mostra
     el següent arpegi, tot en blanc.
@@ -50,15 +52,18 @@ Funciona a l'iPhone, a l'iPad i al Mac des del navegador, i es pot instal·lar c
     diferent.
   - En 3/4 l'acompanyament fa vals de jazz: charles al 2 i al 3, baix «1 · 3» o walking, i de vegades una hemiòlia de
     6/8 (accents a l'1 i a la segona corxera del 2).
-- **Complexitat de l'acompanyament** (pestanya So): un fader de simple a ric. Amb el fader avall, la bateria fa menys
+- **Complexitat de l'acompanyament** (pestanya Mix): un fader de simple a ric. Amb el fader avall, la bateria fa menys
   notes fantasma i redobles, el piano toca menys cops i el baix de swing va a 2 (blanques). Amb el fader amunt hi ha més
   subdivisió, més comping, més corxeres swingades al baix i més anticipacions. El ride sempre manté un pols estable.
-- **Baix:** les aproximacions cromàtiques (un semitò abans de l'acord següent) duren com a molt una corxera. Les notes
+- **Baix segons la complexitat:** amb el fader avall fa notes llargues (una rodona per compàs, o una blanca amb punt
+  i una negra); al mig, blanques i walking; amunt, walking amb alguna corxera swingada.
+- **Baix:** les aproximacions cromàtiques, poc freqüents, (un semitò abans de l'acord següent) duren com a molt una corxera. Les notes
   de pas que duren un temps sencer són notes de l'acord o la quinta del següent.
 - **Agrupaments i accents:** en els compassos de x/4 escrits en corxeres, els grups de 2 consecutius es noten com a
   grups de 4. Un 7/4 en 2+2+2+2+3+3 sona com 4+4+3+3.
-- **Ride:** en els compassos d'amalgama i de x/8, el ride sempre va a corxeres, sigui quin sigui l'agrupament. Els
-  grups només en marquen la dinàmica. A tempos molt ràpids passa a negres.
+- **Ride:** en els compassos d'amalgama el ride sempre va a corxeres. En els de x/4 (5/4, 7/4…) frasseja com si
+  el compàs fos 2+2+2…: els grups de 3 ja els marquen els altres instruments. En els de x/8 segueix els grups. A
+  tempos molt ràpids passa a negres.
 - **Anticipacions:** de tant en tant, l'harmonia toca l'acord següent una corxera abans del temps fort, com és habitual
   en jazz i bossa.
 - **Exercicis:**

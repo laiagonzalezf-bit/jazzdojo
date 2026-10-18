@@ -222,30 +222,46 @@ export class Groove {
 
     // bass
     if (info.chordStart) {
+      // how the bass plays this chord depends on the complexity: long notes when simple, walking when busy
+      this.bassMode = cx < 0.15 ? 'whole'
+        : cx < 0.35 ? (this.rng() < 0.3 ? 'dotted' : 'two')
+          : cx < 0.6 ? (this.rng() < (cx - 0.35) * 3.2 ? 'walk' : 'two')
+            : 'walk';
+      const pairs = style === 'swing' && this.bassMode === 'walk' && cx >= 0.5;
       this.line = this.walk(ch, ev.beats, info.nextEv && info.nextEv.chord,
-        style === 'swing' && cx >= 0.2 ? { pairs: true, pChrom: 0.25 * busy, pSkip: 0.07 * busy } : {});
+        pairs ? { pairs: true, pChrom: 0.1 * busy, pSkip: 0.07 * busy } : {});
     }
     const line = this.line || [this.nearest(ch.root, 36)];
     const val = n => (typeof n === 'number' ? n : n.a);
     const root = line[0];
     const fifth = this.nearest((ch.root + ch.iv[5]) % 12, root + 5, 28, 47);
-    if (style === 'swing' && cx < 0.2) {
-      // simple: two-feel, half notes
-      if (bi % 2 === 0) B(val(line[Math.min(bi, line.length - 1)]), t, spb * Math.min(2, ev.beats - bi) * 0.92, bi === 0 ? 1 : 0.85);
+    const at = i => val(line[Math.min(i, line.length - 1)]);
+    const left = ev.beats - bi;
+    const mode = this.bassMode;
+    if (style === 'swing' && mode === 'whole') {
+      if (bi % 4 === 0) B(at(bi), t, spb * Math.min(4, left) * 0.95, 1);                      // one long note per bar
+    } else if (style === 'swing' && mode === 'dotted') {
+      if (bi % 4 === 0) B(at(bi), t, spb * Math.min(3, left) * 0.93, 1);                      // dotted half…
+      else if (bi % 4 === 3) B(at(ev.beats - 1), t, spb * 0.9, 0.85);                          // …and a quarter into the next
+    } else if (style === 'swing' && mode === 'two') {
+      if (bi % 2 === 0) B(at(bi), t, spb * Math.min(2, left) * 0.93, bi === 0 ? 1 : 0.85);     // two-feel: half notes
     } else if (style === 'swing') {
       const n = line[Math.min(bi, line.length - 1)];
       if (typeof n === 'number') B(n, t, spb * 0.88, bi === 0 ? 1 : 0.85);
       else { B(n.a, t, sw * spb * 0.92, 0.88); B(n.b, off, (1 - sw) * spb * 0.9, 0.72); } // swung pair of eighths
     } else if (style === 'ballad') {
-      if (bi === 0) B(root, t, spb * Math.min(ev.beats, 2) * 0.95, 0.9);
-      else if (bi % 2 === 0) B(val(line[Math.min(bi, line.length - 1)]), t, spb * 1.9, 0.75);
+      if (cx < 0.3) { if (bi % 4 === 0) B(bi === 0 ? root : at(bi), t, spb * Math.min(4, left) * 0.95, 0.9); }
+      else if (bi === 0) B(root, t, spb * Math.min(ev.beats, 2) * 0.95, 0.9);
+      else if (bi % 2 === 0) B(at(bi), t, spb * 1.9, 0.75);
     } else if (style === 'bossa') {
-      if (b % 2 === 0) B(b % 4 === 0 || bi === 0 ? root : fifth, t, spb * 1.4, 0.95);
+      if (cx < 0.3) { if (b % 2 === 0) B(b % 4 === 0 || bi === 0 ? root : fifth, t, spb * Math.min(2, left) * 0.93, 0.95); }
+      else if (b % 2 === 0) B(b % 4 === 0 || bi === 0 ? root : fifth, t, spb * 1.4, 0.95);
       else B(b % 4 === 1 ? fifth : root, t + spb * 0.5, spb * 0.45, 0.6);
     } else {
       const n = b % 4 === 2 ? fifth : root;
-      B(n, t, spb * 0.45, b % 2 === 0 ? 1 : 0.75);
-      B(n, t + spb * 0.5, spb * 0.4, 0.6);
+      if (cx < 0.3) { if (b % 2 === 0) B(n, t, spb * Math.min(2, left) * 0.93, 1); }       // half notes
+      else if (cx < 0.6) B(n, t, spb * 0.9, b % 2 === 0 ? 1 : 0.8);                           // quarters
+      else { B(n, t, spb * 0.45, b % 2 === 0 ? 1 : 0.75); B(n, t + spb * 0.5, spb * 0.4, 0.6); } // eighths
     }
 
     // harmony
@@ -331,10 +347,11 @@ export class Groove {
         const fast = eighth < 0.15;
         const plays = !fast || (pb === 2 ? j === 0 : start);
         if (plays) {
-          const base = major ? 0.74 : start ? 0.6 : 0.42;
-          // a slight long-short lilt inside each group keeps it from sounding mechanical
-          const pos = e - (g.starts.filter(x => x <= e).pop() ?? 0);
-          D('ride', tt, base * (pos === 1 ? 0.92 : 1) * this.r(0.94, 1.06));
+          // x/4: the ride phrases as if the bar were 2+2+2… (quarters with eighths in between) — the 3-groups are
+          // left to the other instruments. x/8: the ride follows the groups.
+          const base = pb === 2 ? (j === 0 ? (e === 0 ? 0.72 : 0.62) : 0.4)
+            : (major ? 0.74 : start ? 0.6 : 0.42);
+          D('ride', tt, base * this.r(0.94, 1.06));
         }
         if (major && e !== 0) D('hhpedal', tt, 0.65);
         if (e === 0) D('kick', tt, 0.4);
@@ -360,18 +377,19 @@ export class Groove {
       // bass hits: the felt groups (plus, the busier the setting, some of the smaller groups)
       let hits = [];
       const waltz = o.meter.num === 3 && o.meter.den === 4 && !g.oddGroups;
-      const walkAll = jazz && style === 'swing' && !straight && this.rng() < Math.min(0.9, (waltz ? 0.35 : 0.5) * busy);
+      const walkAll = jazz && style === 'swing' && !straight && x.cx >= 0.35 && this.rng() < Math.min(0.9, (waltz ? 0.35 : 0.5) * busy);
       for (let k = 0; k < lenE; k++) {
         const be = barE(k);
         if (k === 0) { hits.push(k); continue; }
         if (walkAll) { if (k % 2 === 0) hits.push(k); continue; }
+        if (x.cx < 0.25) { if (be === 0) hits.push(k); continue; }               // simple: one long note per bar
         if (waltz && jazz) { if (be === 4 || be === 0) hits.push(k); continue; } // "1 . 3"
         if (g.majorSet.has(be)) { hits.push(k); continue; }
-        if (g.startSet.has(be) && this.rng() < 0.35 * busy) { hits.push(k); continue; }
+        if (g.startSet.has(be) && x.cx >= 0.5 && this.rng() < 0.35 * busy) { hits.push(k); continue; }
         if (!jazz && g.majorSet.has((be + 1) % g.E) && this.rng() < 0.3 * busy) hits.push(k); // pickup into a group
       }
       const pairs = walkAll && pb === 2;
-      const line = jazz ? this.walk(ch, hits.length, nextCh, pairs ? { pairs, pChrom: 0.22 * busy, pSkip: 0.07 * busy } : {})
+      const line = jazz ? this.walk(ch, hits.length, nextCh, pairs ? { pairs, pChrom: 0.1 * busy, pSkip: 0.07 * busy } : {})
         : hits.map((k, i) => {
           const root = this.nearest(ch.bass ?? ch.root, Math.min(Math.max(this.lastBass, 31), 45), 28, 47);
           if (i === 0) return root;
@@ -389,7 +407,7 @@ export class Groove {
       });
       // a chromatic leading eighth into the next chord, on the last eighth (never longer than an eighth)
       const lastK = lenE - 1;
-      if (nextCh && lenE >= 3 && !plan.has(lastK) && info.nextEv.label !== ev.label && this.rng() < 0.22 * busy) {
+      if (nextCh && lenE >= 3 && !plan.has(lastK) && info.nextEv.label !== ev.label && x.cx >= 0.35 && this.rng() < 0.1 * busy) {
         const prevK = Math.max(...[...plan.keys()].filter(k => k < lastK));
         const tg = this.nearest(nextCh.bass ?? nextCh.root, plan.get(prevK).midi, 28, 47);
         const lead = plan.get(prevK).midi >= tg ? tg + 1 : tg - 1;

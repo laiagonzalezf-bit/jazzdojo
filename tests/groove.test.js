@@ -167,11 +167,10 @@ test('7/4 as 2+2+2+2+3+3 is felt 4+4+3+3: accents on eighths 0, 4, 8, 11 only; r
   const bars = new Map();
   for (const r of rides) { const k = r.b.barNo; if (!bars.has(k)) bars.set(k, new Set()); bars.get(k).add(e8(r)); }
   for (const set of bars.values()) assert.equal(set.size, 14);
-  // dynamics: the felt group starts (4+4+3+3) are louder on average than the rest
+  // dynamics: the ride phrases in quarters (2+2+2…) whatever the grouping: on-beats louder than offbeats
   const avg = f => { const v = rides.filter(f).map(x => x.v); return v.reduce((a, c) => a + c, 0) / v.length; };
-  const felt = r => [0, 4, 8, 11].includes(e8(r));
-  assert.ok(avg(felt) > avg(r => !felt(r) && ![2, 6].includes(e8(r))) + 0.2);
-  assert.ok(avg(felt) > avg(r => [2, 6].includes(e8(r))) + 0.08);
+  assert.ok(avg(r => e8(r) % 2 === 0) > avg(r => e8(r) % 2 === 1) + 0.15);
+  assert.ok(Math.abs(avg(r => e8(r) === 9) - avg(r => e8(r) === 13)) < 0.08); // eighth 9 (in a 3-group) isn't singled out
 });
 test('very fast odd meters: the ride drops to quarter-note pulses', async () => {
   const { Groove } = await import('../src/groove.js');
@@ -183,4 +182,23 @@ test('very fast odd meters: the ride drops to quarter-note pulses', async () => 
   const gr = new Groove(rng(2)); let t = 0; const rides = [];
   while (!seq.done) { const b = seq.step(t, 0.12); rides.push(...gr.beat(b, { style: 'swing', meter: m, harmony: 'piano', tempo: 500 }).filter(n => n.kind === 'drum' && n.name === 'ride').map(() => b.bib)); t += 0.12; }
   for (const e of rides) assert.ok([0, 2, 4].includes(e), `ride on ${e}`);
+});
+
+test('bass: simpler settings play fewer and longer notes', () => {
+  for (const [style, m] of [['swing', { num: 4, den: 4 }], ['even', { num: 4, den: 4 }], ['bossa', { num: 4, den: 4 }], ['swing', { num: 7, den: 4, groups: [2, 2, 2, 2, 3, 3] }], ['swing', { num: 3, den: 4 }]]) {
+    const stats = cx => { let n = 0, d = 0; for (const seed of [1, 2, 3]) for (const x of render(style, 'piano', m, 2, seed, cx).filter(q => q.kind === 'bass')) { n++; d += x.dur; } return [n, d / n]; };
+    const [n0, d0] = stats(0), [n5, d5] = stats(0.5), [n1, d1] = stats(1);
+    assert.ok(n0 < n5 && n5 <= n1, `${style} ${m.num}/${m.den}: notes ${n0} ${n5} ${n1}`);
+    assert.ok(d0 > d5 && d5 >= d1 * 0.95, `${style} ${m.num}/${m.den}: avg length ${d0.toFixed(2)} ${d5.toFixed(2)} ${d1.toFixed(2)}`);
+  }
+});
+test('chromatic approaches are rare', () => {
+  let chrom = 0, total = 0;
+  for (const seed of [1, 2, 3, 4]) for (const n of render('swing', 'piano', { num: 4, den: 4 }, 1, seed, 0.5).filter(q => q.kind === 'bass')) {
+    total++;
+    const nx = n.b.nextEv && n.b.nextEv.chord; if (!nx) continue;
+    const d = ((n.midi - (nx.bass ?? nx.root)) % 12 + 12) % 12;
+    if ((d === 1 || d === 11) && n.dur < 0.25) chrom++;
+  }
+  assert.ok(chrom / total < 0.06, `${chrom}/${total} chromatic`);
 });
